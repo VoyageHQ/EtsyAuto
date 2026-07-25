@@ -581,14 +581,61 @@ function officePanel(state, ctx) {
       </div>
       <textarea id="teach-text" placeholder="e.g. always use Monday as the first day of the week, or never propose anything with cartoon characters"></textarea>
 
-      <h4 style="margin:18px 0 8px;font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--amber)">house rules</h4>
+      <h4 style="margin:18px 0 8px;font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--amber)">your house rules (${state.lessons.length})</h4>
       ${lessons}
+
+      <h4 style="margin:18px 0 8px;font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--amber)">what they already know</h4>
+      <p class="quiet" style="margin-bottom:8px">${state.knowledge.total} lessons from ${
+        state.knowledge.packs.length
+      } knowledge packs that ship with the project${
+        state.knowledge.removed ? `, and ${state.knowledge.removed} you have removed` : ''
+      }. Click a pack to read it.</p>
+      ${state.knowledge.packs
+        .map(
+          (pack) => `<div class="lesson">
+            <div><b>${esc(pack.agent)}</b><br />${esc(pack.title)} — ${esc(pack.summary)}</div>
+            <button class="tiny" data-pack="${esc(pack.agent)}">${pack.active} lessons</button>
+          </div>`
+        )
+        .join('')}
+      ${
+        state.knowledge.removed
+          ? `<div class="actions" style="margin-top:10px"><button class="tiny" data-act="restore">bring back the ${state.knowledge.removed} I removed</button></div>`
+          : ''
+      }
+      <div id="pack-reader"></div>
 
       <h4 style="margin:18px 0 8px;font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--amber)">recent jobs</h4>
       ${jobs || '<p class="quiet">Nothing has run yet.</p>'}
     `,
     mount(root) {
       root.addEventListener('click', async (e) => {
+        // Read one agent's knowledge on demand rather than shipping ~280
+        // lessons in every state refresh.
+        const packAgent = e.target.dataset?.pack;
+        if (packAgent) {
+          const reader = root.querySelector('#pack-reader');
+          if (reader.dataset.open === packAgent) {
+            reader.innerHTML = '';
+            reader.dataset.open = '';
+            return;
+          }
+          const { name, lessons: known } = await api.knowledge(
+            packAgent === 'everyone' ? 'everyone' : packAgent
+          );
+          reader.dataset.open = packAgent;
+          reader.innerHTML = `
+            <h4 style="margin:14px 0 8px;font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--amber)">${esc(
+              name
+            )} knows ${known.length} things</h4>
+            ${known
+              .map(
+                (l) => `<div class="lesson"><div>${esc(l.text)}</div>
+                  <button class="tiny danger" data-forget="${esc(l.id)}">forget</button></div>`
+              )
+              .join('')}`;
+          return;
+        }
         const forget = e.target.dataset?.forget;
         if (forget) {
           await api.forget(forget);
@@ -608,6 +655,11 @@ function officePanel(state, ctx) {
         if (act === 'loop-off') {
           await api.loop(false);
           ctx.toast('loop paused');
+        }
+        if (act === 'restore') {
+          const { added } = await api.restoreKnowledge();
+          ctx.toast(`${added} restored`);
+          return ctx.refresh(true);
         }
         if (act === 'teach') {
           const text = root.querySelector('#teach-text').value.trim();

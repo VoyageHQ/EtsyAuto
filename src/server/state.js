@@ -15,6 +15,7 @@ import { roster } from '../agents/registry.js';
 import { recentEvents } from '../core/events.js';
 import { openApprovals } from '../core/approvals.js';
 import { allLessons } from '../core/memory.js';
+import { packSummary } from '../knowledge/index.js';
 import { queuedCount, recentJobs } from '../pipeline/queue.js';
 import { listProducts, getListing, assetsFor } from '../pipeline/products.js';
 import { llm } from '../core/llm.js';
@@ -152,13 +153,23 @@ export function buildState() {
       error: j.error,
       createdAt: j.created_at,
     })),
-    lessons: allLessons().map((l) => ({
-      id: l.id,
-      agent: l.agent_id,
-      text: l.text,
-      source: l.source,
-      createdAt: l.created_at,
-    })),
+    // Your own corrections travel in full — there are never many and you need
+    // to see them. The ~280 pack lessons are summarised instead of shipped on
+    // every refresh; the Office fetches one agent's set on demand.
+    lessons: allLessons()
+      .filter((l) => !String(l.source || '').startsWith('pack:'))
+      .map((l) => ({
+        id: l.id,
+        agent: l.agent_id,
+        text: l.text,
+        source: l.source,
+        createdAt: l.created_at,
+      })),
+    knowledge: {
+      packs: packSummary(),
+      total: count("SELECT COUNT(*) FROM lessons WHERE active = 1 AND source LIKE 'pack:%'"),
+      removed: count("SELECT COUNT(*) FROM lessons WHERE active = 0 AND source LIKE 'pack:%'"),
+    },
     ledger: {
       total: Number(one('SELECT IFNULL(SUM(amount),0) AS t FROM sales')?.t || 0),
       sales: all('SELECT * FROM sales ORDER BY occurred_at DESC LIMIT 20'),

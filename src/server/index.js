@@ -7,11 +7,13 @@ import config from '../core/config.js';
 import { bus, log } from '../core/events.js';
 import { buildState, productDetail } from './state.js';
 import { answer as answerApproval } from '../core/approvals.js';
-import { teach, forget } from '../core/memory.js';
+import { teach, forget, lessonsFor } from '../core/memory.js';
+import { loadKnowledge } from '../knowledge/index.js';
+import { getAgent } from '../agents/registry.js';
 import { decideIdeas, requestIdeas, rebuild, tick, start, stop, isRunning } from '../pipeline/orchestrator.js';
 import { decideVenture, setCampaignStatus } from '../ventures/pipeline.js';
 import { enqueue } from '../pipeline/queue.js';
-import { insert, setSetting, getSetting, update, one } from '../core/db.js';
+import { all, insert, setSetting, getSetting, update, one } from '../core/db.js';
 import { uid, now } from '../core/util.js';
 import { assetsFor, getProduct } from '../pipeline/products.js';
 
@@ -227,6 +229,29 @@ const routes = [
     log({ kind: 'revenue', level: 'good', message: `Venture revenue recorded: ${amount}` });
     return { ok: true };
   }],
+
+  ['GET', /^\/api\/knowledge\/([\w-]+)$/, async (req, res, [, agentId]) => {
+    const agent = getAgent(agentId);
+    // "everyone" means the house rules of both businesses, which are scoped by
+    // division and so would not come back from a normal agent lookup.
+    const lessons =
+      agentId === 'everyone'
+        ? all("SELECT * FROM lessons WHERE active = 1 AND agent_id IS NULL ORDER BY division, created_at")
+        : lessonsFor(agentId, agent?.division ?? null);
+    return {
+      agent: agentId,
+      name: agent?.name || agentId,
+      lessons: lessons.map((l) => ({
+        id: l.id,
+        text: l.text,
+        source: l.source,
+        division: l.division || null,
+        fromPack: String(l.source || '').startsWith('pack:'),
+      })),
+    };
+  }],
+
+  ['POST', /^\/api\/knowledge\/restore$/, async () => loadKnowledge({ restoreDeleted: true })],
 
   ['POST', /^\/api\/tick$/, async () => ({ worked: await tick() })],
 
