@@ -127,7 +127,7 @@ export class Agent {
       '',
       `How you write: ${this.voice}`,
       this.usesInsights === false ? '' : insightBlock(this.id, this.division),
-      lessonBlock(this.id),
+      lessonBlock(this.id, this.division),
     ]
       .filter(Boolean)
       .join('\n');

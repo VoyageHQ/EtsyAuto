@@ -280,6 +280,20 @@ CREATE TABLE IF NOT EXISTS failures (
 CREATE INDEX IF NOT EXISTS failures_pattern ON failures(pattern);
 `);
 
+// --- migrations ------------------------------------------------------------
+// The schema above is created with IF NOT EXISTS, so a database made by an
+// older version never gains new columns. Adding one is safe to attempt every
+// start: SQLite refuses a duplicate and we ignore that.
+for (const [table, column, type] of [
+  ['lessons', 'division', 'TEXT'], // so shop rules never reach venture agents
+]) {
+  try {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  } catch {
+    // already there
+  }
+}
+
 // --- generic helpers -------------------------------------------------------
 
 export const all = (sql, ...params) => db.prepare(sql).all(...params);

@@ -10,7 +10,8 @@ import { all, count, one } from './core/db.js';
 import { agentList } from './agents/registry.js';
 import { drain, requestIdeas, decideIdeas } from './pipeline/orchestrator.js';
 import { enqueue } from './pipeline/queue.js';
-import { teach, allLessons } from './core/memory.js';
+import { teach, allLessons, lessonsFor } from './core/memory.js';
+import { loadKnowledge, packSummary } from './knowledge/index.js';
 import { openApprovals, answer } from './core/approvals.js';
 import { listProducts } from './pipeline/products.js';
 import { money } from './core/util.js';
@@ -158,6 +159,37 @@ const commands = {
     console.log('Wiped. Files in out/ are left alone.');
   },
 
+  knowledge() {
+    if (rest[0] === '--restore') {
+      const { added } = loadKnowledge({ restoreDeleted: true });
+      console.log(`\nRestored ${added} lesson(s) you had deleted.\n`);
+      return;
+    }
+    const { added } = loadKnowledge();
+    const packs = packSummary();
+    console.log(`\n${bold('Knowledge packs')} ${dim(`(${added} newly loaded)`)}\n`);
+    for (const pack of packs) {
+      const removed = pack.removed ? dim(` · ${pack.removed} removed by you`) : '';
+      console.log(
+        `  ${pack.title.padEnd(38)} ${dim(pack.agent.padEnd(15))} ${String(pack.active).padStart(3)} active${removed}`
+      );
+      console.log(dim(`    ${pack.summary}`));
+    }
+    const total = packs.reduce((n, p) => n + p.active, 0);
+    console.log(`\n  ${bold(String(total))} lessons in force across ${packs.length} packs.`);
+    console.log(dim('  npm run knowledge -- --restore   brings back anything you deleted\n'));
+
+    if (rest[0] && rest[0] !== '--restore') {
+      const agent = rest[0];
+      const lessons = lessonsFor(agent, agentList().find((a) => a.id === agent)?.division);
+      console.log(`${bold(`What ${agent} knows`)} ${dim(`(${lessons.length} lessons)`)}\n`);
+      for (const lesson of lessons) {
+        console.log(`  ${dim('·')} ${lesson.text}`);
+      }
+      console.log('');
+    }
+  },
+
   help() {
     console.log(`
 ${bold(config.valleyName)}
@@ -171,6 +203,7 @@ ${bold(config.valleyName)}
   npm run status                   what everyone is doing
   npm run teach -- <agent> <rule>  correct an agent for good
   npm run list                     every product and where it is up to
+  npm run knowledge [-- <agent>]   what the packs have taught everyone
   node scripts/discord-setup.js    the Discord walkthrough
   node scripts/etsy-auth.js        get your Etsy access token
 `);

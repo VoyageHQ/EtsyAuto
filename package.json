@@ -22,7 +22,8 @@
     "reset": "node --disable-warning=ExperimentalWarning src/cli.js reset",
     "discord:setup": "node --disable-warning=ExperimentalWarning scripts/discord-setup.js",
     "etsy:auth": "node --disable-warning=ExperimentalWarning scripts/etsy-auth.js",
-    "test": "node --disable-warning=ExperimentalWarning test/smoke.js"
+    "test": "node --disable-warning=ExperimentalWarning test/smoke.js",
+    "knowledge": "node --disable-warning=ExperimentalWarning src/cli.js knowledge"
   },
   "dependencies": {},
   "devDependencies": {}

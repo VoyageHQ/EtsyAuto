@@ -7,6 +7,7 @@ import { startDashboard } from './server/index.js';
 import { start as startLoop, stop as stopLoop } from './pipeline/orchestrator.js';
 import { enqueue } from './pipeline/queue.js';
 import { startDiscord, stopDiscord } from './discord/bot.js';
+import { loadKnowledge } from './knowledge/index.js';
 
 const args = new Set(process.argv.slice(2));
 
@@ -18,6 +19,10 @@ log({
     `etsy: ${config.etsy.enabled ? config.etsy.publishMode : 'export only'}.`,
   discord: false,
 });
+
+// The agents' schooling. Packs live in the repo so knowledge survives a fresh
+// database and travels between machines; anything you have deleted stays gone.
+loadKnowledge();
 
 // A brand new shop needs something to look at.
 if (count('SELECT COUNT(*) FROM ideas') === 0) {
