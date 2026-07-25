@@ -23,7 +23,7 @@ import { drain, decideIdeas, requestIdeas } from '../src/pipeline/orchestrator.j
 import { enqueue } from '../src/pipeline/queue.js';
 import { listProducts, getListing, assetsFor } from '../src/pipeline/products.js';
 import { openApprovals, answer } from '../src/core/approvals.js';
-import { teach, lessonsFor } from '../src/core/memory.js';
+import { teach, lessonsFor, forget } from '../src/core/memory.js';
 import { insightBlock, ownerTaste } from '../src/core/insights.js';
 import { closestMatch, cannibalWarning, TOO_SIMILAR } from '../src/core/similarity.js';
 import { recordFailures, failureSummary } from '../src/core/retro.js';
@@ -31,6 +31,18 @@ import { record, todayUsage, usageByAgent, overBudget } from '../src/core/spend.
 import { uid } from '../src/core/util.js';
 import { auditListing } from '../src/etsy/seo.js';
 import { avatarFor } from '../src/discord/avatars.js';
+import { loadKnowledge, packSummary } from '../src/knowledge/index.js';
+import {
+  findTrademarks,
+  findBannedPhrases,
+  findShameLanguage,
+  findPlaceholders,
+  tidyPrice,
+  bandFor,
+  spellingVariants,
+  ventureKillReasons,
+  evidenceStrength,
+} from '../src/knowledge/apply.js';
 
 let failures = 0;
 let checks = 0;
@@ -402,6 +414,68 @@ console.log('\nThe venture arm');
     'the shop\'s numbers never reach a venture prompt',
     insightBlock('prospector', 'ventures') === ventureInsightBlock()
   );
+}
+
+console.log('\nWhat the agents have been taught');
+{
+  const { added } = loadKnowledge();
+  const packs = packSummary();
+  const total = packs.reduce((n, p) => n + p.lessons, 0);
+  check('knowledge packs load', packs.length >= 16, `${packs.length} packs`);
+  check('   and carry real content', total >= 250, `${total} lessons`);
+
+  const scoutKnows = lessonsFor('scout', 'etsy');
+  const prospectorKnows = lessonsFor('prospector', 'ventures');
+  check('every agent gets its own plus its house rules', scoutKnows.length > 20 && prospectorKnows.length > 20);
+  check(
+    'shop rules never reach a venture agent',
+    prospectorKnows.every((l) => l.division !== 'etsy')
+  );
+  check(
+    'venture rules never reach a shop agent',
+    scoutKnows.every((l) => l.division !== 'ventures')
+  );
+  check('loading twice adds nothing', loadKnowledge().added === 0);
+
+  // A deleted lesson must stay deleted, or the delete button is a lie.
+  const victim = lessonsFor('scout', 'etsy').find((l) => String(l.source).startsWith('pack:'));
+  forget(victim.id);
+  loadKnowledge();
+  check('a lesson you deleted is not silently reinstated', !lessonsFor('scout', 'etsy').some((l) => l.id === victim.id));
+  check('and can be brought back deliberately', loadKnowledge({ restoreDeleted: true }).added >= 1);
+}
+
+console.log('\nKnowledge that works without a model');
+{
+  check('a trademark in a title is caught', findTrademarks('Bluey Chore Chart').length === 1);
+  check('   including in a filename', findTrademarks('out/x/peppa-planner.pdf').length === 1);
+  check('unprovable claims are caught', findBannedPhrases('Unlock your best selling year').length >= 2);
+  check('shaming language is caught', findShameLanguage('stop making excuses and tidy up').length >= 1);
+  check('placeholders are caught', findPlaceholders('Item 1 goes here').length >= 1);
+
+  check('prices land on a charm ending', String(tidyPrice(4.2, 'small pack')).endsWith('.49'));
+  check('   and never below the floor the fees demand', tidyPrice(0.5, 'single sheet') >= 2.5);
+  check('   and never above the band for that product', tidyPrice(30, 'single sheet') <= 4.5);
+  check('the band follows what the product is', bandFor({ pages: 12 }) === 'binder' && bandFor({ pages: 1 }) === 'single sheet');
+
+  check('spelling variants are suggested', spellingVariants(['budget organiser']).includes('budget organizer'));
+  check('   but synonyms are not swapped', !spellingVariants(['meal planner']).includes('meal diary'));
+
+  check(
+    'a venture needing a licence is killed on sight',
+    ventureKillReasons(
+      { name: 'x', one_liner: 'automated financial advice', solution: '', audience: 'investors', monetisation: { model: 'subscription', price: 20, daysToRevenue: 30 } },
+      90
+    ).length >= 1
+  );
+  check(
+    'a subscription priced below the floor is flagged',
+    ventureKillReasons(
+      { name: 'x', one_liner: 'y', solution: '', audience: 'a', monetisation: { model: 'subscription', price: 3, daysToRevenue: 30 } },
+      90
+    ).length >= 1
+  );
+  check('one post is an anecdote, three is a signal', evidenceStrength(1).level === 'anecdote' && evidenceStrength(3).level === 'signal');
 }
 
 console.log('\nDiscord');

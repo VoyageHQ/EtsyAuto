@@ -5,6 +5,7 @@ import config from '../core/config.js';
 import { getVenture, advanceVenture, setVentureStage } from '../ventures/pipeline.js';
 import { ask } from '../core/approvals.js';
 import { money, truncate } from '../core/util.js';
+import { ventureKillReasons } from '../knowledge/apply.js';
 
 export class Analyst extends Agent {
   constructor() {
@@ -50,6 +51,15 @@ Rules:
     });
 
     const clean = this.normalise(analysis, venture);
+
+    // Rules the packs say are non-negotiable, checked in code so they hold
+    // whether or not a model looked at this.
+    const hardStops = ventureKillReasons(venture, config.ventures.maxDaysToRevenue);
+    if (hardStops.length) {
+      clean.verdict = 'kill';
+      clean.why = hardStops.join(' ');
+      clean.risks = [...hardStops, ...(clean.risks || [])].slice(0, 6);
+    }
 
     if (clean.verdict === 'kill') {
       this.say(`${venture.name}: killed. ${clean.why}`, {

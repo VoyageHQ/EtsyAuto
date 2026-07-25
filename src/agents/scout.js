@@ -6,6 +6,7 @@ import { all, insert, count } from '../core/db.js';
 import { slug, uid, now, pick, shuffle, truncate, titleCase } from '../core/util.js';
 import { ask, cancelFor, openApprovals } from '../core/approvals.js';
 import { catalogue, closestMatch, tokens, TOO_SIMILAR } from '../core/similarity.js';
+import { matchesAvoidPattern, findTrademarks, tidyPrice, bandFor } from '../knowledge/apply.js';
 import config from '../core/config.js';
 import { pushState } from '../core/events.js';
 
@@ -223,6 +224,19 @@ Return a JSON array. Each element:
       const near = closestMatch(`${title} ${(item.keywords || []).join(' ')}`, known);
       if (near.match && near.score >= TOO_SIMILAR) {
         skipped.push(`${title} (too close to "${near.match.title}")`);
+        continue;
+      }
+
+      // Things the shop has learned not to bother with, enforced whether or
+      // not a model was involved in proposing this.
+      const trademark = findTrademarks(title, (item.keywords || []).join(' '));
+      if (trademark.length) {
+        skipped.push(`${title} (trademark: ${trademark.join(', ')})`);
+        continue;
+      }
+      const avoid = matchesAvoidPattern(title);
+      if (avoid.length) {
+        skipped.push(`${title} (${avoid.join(', ')} never sells)`);
         continue;
       }
 

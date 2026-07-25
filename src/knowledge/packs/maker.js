@@ -63,14 +63,22 @@ export default {
       largePrint: { minPt: 14 },
     },
     // Language that must never appear on a page aimed at neurodivergent buyers.
+    // Note the precision: "never miss twice" is the forgiving framing — it
+    // explicitly allows missing once — so the rule targets streak pressure and
+    // blame, not the word "miss".
     shameWords: [
       'lazy',
       'no excuses',
       'discipline yourself',
       'stop making excuses',
       'you failed',
+      'you have failed',
       'don\'t break the chain',
-      'never miss',
+      'do not break the chain',
+      'never miss a day',
+      'perfect streak',
+      'unbroken streak',
+      'willpower',
     ],
   },
 };

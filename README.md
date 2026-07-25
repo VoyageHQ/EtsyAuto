@@ -171,8 +171,21 @@ npm run teach -- copywriter  always use British spelling and no exclamation mark
 npm run teach -- everyone    the shop is called Hartistic, never write Hartistic Co
 ```
 
-Turning an idea down *with a reason* teaches the Scout automatically. See
-[docs/TEACHING.md](docs/TEACHING.md).
+Turning an idea down *with a reason* teaches the Scout automatically.
+
+They also start with about 280 lessons already learned — sixteen **knowledge
+packs** that ship in the repo covering Etsy mechanics, print production,
+accessible and neurodivergent-friendly design, listing copy, one-person unit
+economics and the law around collecting emails:
+
+```bash
+npm run knowledge              # what every agent has been taught
+npm run knowledge -- maker     # one agent's knowledge in full
+```
+
+Crucially, the parts that can be checked in code are enforced with no model
+configured at all — trademarks, unprovable claims, shaming language, price
+floors. See [docs/TEACHING.md](docs/TEACHING.md).
 
 ## Discord
 
@@ -201,6 +214,7 @@ See [docs/PUBLISHING.md](docs/PUBLISHING.md).
 ```
 src/core        config, sqlite, event bus, llm providers, lessons, approvals,
                 insights, similarity, retro, spend
+src/knowledge   the packs, and the rules they enforce in code
 src/agents      one file per villager, plus the Scout's idea corpus
 src/pipeline    the job queue and the product lifecycle
 src/design      vector doc → PDF/SVG/PNG, page templates, mockups

@@ -4,6 +4,7 @@
 import config from '../core/config.js';
 import { money, truncate } from '../core/util.js';
 import { buildTags, buildTitle, buildMaterials } from './seo.js';
+import { tidyPrice, bandFor, spellingVariants } from '../knowledge/apply.js';
 
 /**
  * Suggest a price. Digital products are priced on perceived value, and the
@@ -16,9 +17,9 @@ export function suggestPrice(idea, pageCount) {
   const pageFactor = Math.min(1, Math.max(0, (pageCount - 3) / 12));
   const demandFactor = ((Number(idea.demand) || 3) - 1) / 4;
   const raw = low + spread * (0.35 + pageFactor * 0.35 + demandFactor * 0.3);
-  // Charm pricing: land on .00 / .49 / .99 like the rest of the marketplace.
-  const rounded = Math.round(raw * 2) / 2;
-  return Number((rounded - 0.01).toFixed(2));
+  // The packs decide the rest: never below the floor the fees make sensible,
+  // inside the band for this kind of product, and on a charm ending.
+  return tidyPrice(raw, bandFor({ pages: pageCount, format: idea.format }));
 }
 
 const SECTION_RULE = '· · · · · · · · · · · · · · · · · · · · · · · ·';
@@ -54,15 +55,38 @@ export function buildListing({ idea, product, spec, pageCount, research, body })
   return {
     title,
     description,
-    tags: buildTags(keywords, {
-      category: idea.category,
-      audience: idea.audience,
-      title: idea.title,
-    }),
+    tags: withSpellingVariants(
+      buildTags(keywords, {
+        category: idea.category,
+        audience: idea.audience,
+        title: idea.title,
+      }),
+      keywords,
+      { category: idea.category, audience: idea.audience, title: idea.title }
+    ),
     materials: buildMaterials(spec),
     price,
     files: (pageCount && `${pageCount} pages`) || null,
   };
+}
+
+/**
+ * Etsy treats "organiser" and "organizer" as different words, so a shop selling
+ * to both markets should spend a tag on each. Only swaps in a variant when
+ * there is a slot going spare.
+ */
+function withSpellingVariants(tags, keywords, context) {
+  const extras = spellingVariants(tags).filter((tag) => tag.length <= 20);
+  if (!extras.length) return tags;
+  const room = 13 - tags.length;
+  if (room > 0) return [...tags, ...extras.slice(0, room)];
+  // Full already: trade the weakest generic tag for a spelling variant.
+  const generic = ['printable', 'instant download', 'digital download', 'print at home'];
+  const droppable = tags.findLastIndex((tag) => generic.includes(tag));
+  if (droppable === -1) return tags;
+  const copy = [...tags];
+  copy[droppable] = extras[0];
+  return copy;
 }
 
 const shortFormat = (format) => {

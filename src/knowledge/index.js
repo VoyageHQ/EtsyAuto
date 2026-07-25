@@ -137,8 +137,23 @@ export function rulesFor(agentId) {
   return merged;
 }
 
-/** Everything every pack knows, for the offline paths that want the lot. */
-export const allRules = () => rulesFor(null);
+/**
+ * Every rule from every pack, whoever owns it. The checks in apply.js need the
+ * lot — a trademark list belongs to the shop's house pack but the Inspector,
+ * the Scout and the Lister all have to enforce it.
+ */
+export function allRules() {
+  const merged = {};
+  for (const pack of PACKS) {
+    if (!pack.rules) continue;
+    for (const [key, value] of Object.entries(pack.rules)) {
+      if (Array.isArray(value)) merged[key] = [...(merged[key] || []), ...value];
+      else if (value && typeof value === 'object') merged[key] = { ...(merged[key] || {}), ...value };
+      else merged[key] = value;
+    }
+  }
+  return merged;
+}
 
 /** What a pack contains, for the dashboard and the CLI. */
 export function packSummary() {

@@ -9,6 +9,15 @@ import { getProduct, ideaFor, assetsFor, getListing, setStage } from '../pipelin
 import { auditListing } from '../etsy/seo.js';
 import { ask } from '../core/approvals.js';
 import { recordFailures } from '../core/retro.js';
+import { rulesFor } from '../knowledge/index.js';
+import {
+  findTrademarks,
+  findBannedPhrases,
+  findPlaceholders,
+  findShameLanguage,
+  findOverPromises,
+  findFiller,
+} from '../knowledge/apply.js';
 import { money } from '../core/util.js';
 
 export class QA extends Agent {
@@ -54,7 +63,10 @@ You would rather send something back than let it out half done.`,
         continue;
       }
       const buf = readFileSync(path);
-      if (buf.length < 2000) problems.push(`${pdf.label} is suspiciously small (${buf.length} bytes).`);
+      const minBytes = rulesFor('qa').thresholds?.minPdfBytes ?? 3000;
+      if (buf.length < minBytes) {
+        problems.push(`${pdf.label} is suspiciously small (${buf.length} bytes).`);
+      }
       const head = buf.subarray(0, 8).toString('latin1');
       const tail = buf.subarray(-1024).toString('latin1');
       if (!head.startsWith('%PDF-')) problems.push(`${pdf.label} is not a valid PDF.`);
@@ -64,9 +76,65 @@ You would rather send something back than let it out half done.`,
       const fixedRatio = (product.spec?.pages || []).every((p) => p.paper && p.paper !== 'A4');
       if (!fixedRatio) notes.push('Only one paper size was produced. Buyers outside the UK will ask.');
     }
-    if (mockups.length < 2) problems.push('Fewer than two listing images. Etsy listings need at least five ideally.');
+    const bar = rulesFor('qa').thresholds || {};
+    if (mockups.length < (bar.minImages ?? 4)) {
+      problems.push(
+        `Only ${mockups.length} listing image(s). Etsy shows a gallery and buyers scroll it — ${bar.minImages ?? 4} is the minimum that performs.`
+      );
+    }
     const pageCount = product.spec?.pages?.length || 0;
-    if (pageCount < 2) problems.push('The product is a single page. That is thin for a paid download.');
+    if (pageCount < (bar.minPages ?? 3)) {
+      problems.push(
+        `${pageCount} page(s) is thin for a paid download. Under ${bar.minPages ?? 3} needs to be a poster, not a pack.`
+      );
+    }
+
+    // --- what the knowledge packs say to refuse ----------------------------
+    // These run with or without a model, because a trademark in a title is a
+    // shop-closing problem and must never depend on a model noticing it.
+    const listingText = listing
+      ? `${listing.title} ${listing.description} ${(listing.tags || []).join(' ')}`
+      : product.title;
+    const fileNames = assets.map((a) => a.path).join(' ');
+
+    const trademarks = findTrademarks(listingText, fileNames, product.title);
+    if (trademarks.length) {
+      problems.push(
+        `Trademark risk — remove "${trademarks.join('", "')}" from the listing and the filenames. ` +
+          'This is what closes shops.'
+      );
+    }
+
+    const banned = findBannedPhrases(listingText);
+    if (banned.length) {
+      problems.push(`Unprovable or filler claims: "${banned.slice(0, 3).join('", "')}".`);
+    }
+
+    const placeholders = findPlaceholders(listingText);
+    if (placeholders.length) {
+      problems.push(`Unfinished content left in: "${placeholders.join('", "')}".`);
+    }
+
+    const specText = JSON.stringify(product.spec || {});
+    const shame = findShameLanguage(specText);
+    if (shame.length) {
+      problems.push(
+        `Shaming language on the pages: "${shame.join('", "')}". These buyers have been told they are ` +
+          'lazy quite enough.'
+      );
+    }
+
+    const overPromised = findOverPromises(listingText, product.spec);
+    if (overPromised.length) {
+      problems.push(
+        `The listing promises "${overPromised.join('", "')}" but no such file is included.`
+      );
+    }
+
+    const filler = findFiller(listing?.description || '');
+    if (filler.length > 1) {
+      notes.push(`Copy reads as machine-written: "${filler.slice(0, 2).join('", "')}".`);
+    }
 
     // --- the listing -------------------------------------------------------
     if (!listing) {

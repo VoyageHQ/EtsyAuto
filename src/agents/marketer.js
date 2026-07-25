@@ -11,6 +11,7 @@ import {
 } from '../ventures/pipeline.js';
 import { writeMarketingPack } from '../ventures/marketing.js';
 import { ask } from '../core/approvals.js';
+import { findBannedPhrases } from '../knowledge/apply.js';
 import { money, truncate } from '../core/util.js';
 
 export class Marketer extends Agent {
@@ -286,12 +287,23 @@ proof, no fake urgency, no exclamation marks.`.trim();
         }))
       : fallback.channels;
 
+    // Anything unprovable gets cut before it reaches a file, model or not.
+    const clean = (text) => {
+      const found = findBannedPhrases(text);
+      return found.length
+        ? String(text)
+            .replace(new RegExp(found.map((f) => f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'gi'), '')
+            .replace(/\s{2,}/g, ' ')
+            .trim()
+        : text;
+    };
+
     const ads = Array.isArray(raw.ads)
       ? raw.ads.slice(0, 6).map((a) => ({
           channel: truncate(String(a?.channel || 'Search'), 40),
           angle: truncate(String(a?.angle || ''), 60),
-          headline: truncate(String(a?.headline || ''), 90).replace(/!/g, ''),
-          body: truncate(String(a?.body || ''), 220).replace(/!/g, ''),
+          headline: clean(truncate(String(a?.headline || ''), 90).replace(/!/g, '')),
+          body: clean(truncate(String(a?.body || ''), 220).replace(/!/g, '')),
           cta: truncate(String(a?.cta || 'Take a look'), 40),
           bestFor: truncate(String(a?.bestFor || ''), 120),
         }))

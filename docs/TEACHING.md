@@ -65,6 +65,55 @@ Lessons are cheap. A dozen sharp ones beat one long paragraph.
 | Which bundles and spin-offs get suggested | `curator` |
 | Shop-wide facts and forbidden words | `everyone` |
 
+## What they already know
+
+The agents do not start empty. Sixteen **knowledge packs** ship in the repo —
+around 280 lessons of real domain knowledge — and load into the lessons table
+every time the project starts.
+
+```bash
+npm run knowledge              # every pack, and how many lessons are in force
+npm run knowledge -- maker     # everything one agent knows, in full
+```
+
+They cover, among much else: how Etsy search matches titles against tags, the
+fee structure to price against, 12mm safe margins because home printers cannot
+reach the edge, 6mm minimum row height for handwriting, cream backgrounds and
+1.5 line spacing for dyslexia-friendly products, the sentence that prevents
+most refunds, one-person unit economics, and the law around collecting email
+addresses.
+
+Packs behave exactly like a lesson you typed. They appear in the Office marked
+with the pack they came from, and **deleting one makes it stay deleted** —
+loading never silently reinstates something you removed. If you want it back:
+
+```bash
+npm run knowledge -- --restore
+```
+
+Why packs rather than just typing them in? Because `data/valley.db` is
+gitignored and never leaves your machine. A lesson taught by hand is yours
+alone; a pack travels with the project and survives a fresh database.
+
+### Knowledge that works without a model
+
+A lesson written in prose only changes behaviour when a model reads it. With
+`LLM_PROVIDER=offline` nobody reads anything — so the parts of the knowledge
+that can be expressed as a check are also enforced in code:
+
+| Enforced in code | Where it bites |
+| --- | --- |
+| Trademark names in a title, tag, description **or filename** | Inspector rejects, Scout never proposes |
+| Unprovable claims and marketing filler | Inspector rejects, Marketer strips them from ad copy |
+| Shaming language on neurodivergent products | Inspector rejects |
+| Promising a file that is not shipped | Inspector rejects |
+| Price floors, price bands, charm endings | Every price the shop sets |
+| Spelling variants Etsy treats as different words | Tag building |
+| Licence-needing or out-of-scope ventures | Analyst kills on sight |
+| Subscriptions priced below what fees allow | Analyst flags |
+
+So the knowledge applies today, on your machine, with no API key.
+
 ## Lessons the agents write themselves
 
 The Inspector writes lessons too. The second time it rejects work for the same

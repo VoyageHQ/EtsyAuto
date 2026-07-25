@@ -10,7 +10,8 @@ export default {
     // --- how to build a keyword set -----------------------------------------
     'Build the keyword set in three layers: the head phrase everyone searches ("budget planner"), the long-tail phrase that describes this exact product ("zero based budget planner uk"), and the problem phrase people type when they do not know the product exists ("where does my money go each month").',
     'A tag is capped at twenty characters. Phrases longer than that must be cut at a word boundary, never mid-word, and never padded with a filler word just to fill the slot.',
-    'Spelling differs by market and Etsy does not treat variants as the same word. If the product suits both, spend tags on both: organiser and organizer, colour and color, diary and planner.',
+    'Spelling differs by market and Etsy does not treat variants as the same word. If the product suits both, spend tags on both: organiser and organizer, colour and color, personalised and personalized.',
+    'Synonyms are not spellings. "Diary" and "planner" reach different buyers and both deserve a considered tag, but never swap one for the other automatically — a meal planner is not a meal diary.',
     'Include at least two phrases a buyer would type when they do not yet know what the product is called. Those searches have far less competition and much higher intent.',
     'Do not repeat the same head word in more than about three tags. Thirteen variations of "planner" reach one audience; nine different phrases reach nine.',
     'Attributes and category matter as much as tags. A listing in the wrong category will not rank however good the tags are.',
@@ -45,7 +46,8 @@ export default {
       ['favourite', 'favorite'],
       ['personalised', 'personalized'],
       ['cheque', 'check'],
-      ['diary', 'planner'],
+      ['practise', 'practice'],
+      ['grey', 'gray'],
     ],
     // Words that signal the buyer expects something the shop must actually ship.
     promiseWords: ['editable', 'fillable', 'canva', 'google sheets', 'excel', 'goodnotes'],
