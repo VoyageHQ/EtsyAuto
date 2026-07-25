@@ -26,6 +26,9 @@ import qaPack from './packs/qa.js';
 import listerPack from './packs/lister.js';
 import curatorPack from './packs/curator.js';
 import managerPack from './packs/manager.js';
+import seasonalPack from './packs/seasonal.js';
+import searchPack from './packs/etsy-search.js';
+import aftercarePack from './packs/aftercare.js';
 
 import ventureHouse from './packs/venture-house.js';
 import prospectorPack from './packs/prospector.js';
@@ -34,6 +37,8 @@ import architectPack from './packs/architect.js';
 import builderPack from './packs/builder.js';
 import marketerPack from './packs/marketer.js';
 import harbourmasterPack from './packs/harbourmaster.js';
+import distributionPack from './packs/distribution.js';
+import productSensePack from './packs/product-sense.js';
 
 /** Every pack that ships with the project. */
 export const PACKS = [
@@ -46,6 +51,9 @@ export const PACKS = [
   listerPack,
   curatorPack,
   managerPack,
+  seasonalPack,
+  searchPack,
+  aftercarePack,
   ventureHouse,
   prospectorPack,
   analystPack,
@@ -53,6 +61,8 @@ export const PACKS = [
   builderPack,
   marketerPack,
   harbourmasterPack,
+  distributionPack,
+  productSensePack,
 ];
 
 /**
