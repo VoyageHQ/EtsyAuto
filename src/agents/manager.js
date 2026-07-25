@@ -82,7 +82,17 @@ do not go near it.`,
       decisions.push('sent the Researcher up the Lookout');
     }
 
-    // 5. Keep the seasonal campaign current.
+    // 5. Let the Curator look for bundles and spin-offs once a day, but only
+    //    once there is something finished worth packing.
+    const lastCurate = Number(getSetting('last_curator_scan', '0'));
+    const finished = count("SELECT COUNT(*) FROM products WHERE stage IN ('ready','listed')");
+    if (finished >= 2 && Date.now() - lastCurate > DAY) {
+      setSetting('last_curator_scan', String(Date.now()));
+      enqueue({ agent: 'curator', kind: 'curator.scan', subject: 'bundle scan', priority: 7 });
+      decisions.push('sent the Curator round the Packhouse');
+    }
+
+    // 6. Keep the seasonal campaign current.
     this.ensureCampaign();
 
     if (decisions.length) {

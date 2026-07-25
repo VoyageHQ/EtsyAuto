@@ -62,6 +62,21 @@ in your server.
 `pushState()` tells connected dashboards to refetch. It is a nudge, not a diff —
 state is small and refetching is simpler than reconciling.
 
+## Getting better over time
+
+Three loops, all in `src/core/` and all described in [LEARNING.md](LEARNING.md):
+
+- `insights.js` derives what sold, what stalled and which categories you
+  approve, and `base.js` folds that into every prompt above the lessons.
+- `retro.js` classifies failed reviews and teaches the responsible agent the
+  second time a class of problem appears.
+- `similarity.js` is plain token overlap, used to drop near-duplicate ideas and
+  to warn when a product would compete with the shop's own listings.
+
+`spend.js` counts tokens per call and per agent. Over the daily cap,
+`llm.complete` throws `OfflineError` — the same path as having no model at all,
+so every agent already knows how to carry on.
+
 ## The brain
 
 `src/core/llm.js` exposes `complete`, `completeJson` and an `enabled` flag over

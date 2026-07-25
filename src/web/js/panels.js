@@ -46,6 +46,7 @@ const PANELS = {
   calendar: calendarPanel,
   ledger: ledgerPanel,
   lookout: lookoutPanel,
+  packhouse: packhousePanel,
 };
 
 // --- research bench: the idea list ----------------------------------------
@@ -207,6 +208,34 @@ function officePanel(state, ctx) {
               ? 'Connected. Each agent is posting in its own channel.'
               : 'Not connected. See <code>docs/DISCORD.md</code> — about five minutes.'
           }</p>
+        </div>
+        <div class="tile">
+          <h4>Today's brain use</h4>
+          <p>${state.budget.calls} call${state.budget.calls === 1 ? '' : 's'} ·
+            ${state.budget.total.toLocaleString()} tokens${
+              state.budget.cap ? ` of ${state.budget.cap.toLocaleString()}` : ''
+            }${state.budget.cost !== null ? ` · ${money(state.budget.cost, state.shop.currency)}` : ''}</p>
+          ${
+            state.budget.cap
+              ? `<div style="height:4px;background:var(--ink);border:1px solid var(--line)">
+                   <div style="height:100%;width:${Math.min(
+                     100,
+                     Math.round((state.budget.total / state.budget.cap) * 100)
+                   )}%;background:${
+                     state.budget.total >= state.budget.cap ? 'var(--rose)' : 'var(--amber)'
+                   }"></div>
+                 </div>
+                 <p style="margin-top:6px">At the cap the agents carry on with their offline craft
+                 rather than spending more.</p>`
+              : '<p>No cap set. Add <code>LLM_DAILY_TOKENS</code> to .env if you want one.</p>'
+          }
+          ${
+            state.budget.byAgent.length
+              ? `<p>${state.budget.byAgent
+                  .map((a) => `${esc(a.agent || 'other')} ${(a.input + a.output).toLocaleString()}`)
+                  .join(' · ')}</p>`
+              : ''
+          }
         </div>
       </div>
 
@@ -392,6 +421,23 @@ function reviewPanel(state, ctx) {
         products.length
           ? products.map((p) => productCard(p, state)).join('')
           : '<p class="quiet">Nothing waiting to be checked.</p>'
+      }
+
+      ${
+        (state.failures || []).length
+          ? `<h4 style="margin:18px 0 8px;font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--amber)">what keeps going wrong</h4>
+             <p class="quiet" style="margin-bottom:8px">The second time the Inspector sees one of these
+             it teaches the agent responsible, so it stops happening. The lessons it writes are in the
+             Office and you can delete any you disagree with.</p>
+             ${state.failures
+               .map(
+                 (f) =>
+                   `<div class="lesson"><div><b>${esc(f.agent || 'unassigned')}</b><br />${esc(
+                     f.example || f.pattern
+                   )}</div><span>×${f.times}</span></div>`
+               )
+               .join('')}`
+          : ''
       }`,
     mount(root) {
       wireProducts(root, ctx);
@@ -513,6 +559,11 @@ function calendarPanel(state) {
 
 function ledgerPanel(state, ctx) {
   const currency = state.shop.currency;
+  const insights = state.insights || {};
+  const sellers = (insights.topSellers || []).filter((s) => Number(s.revenue) > 0);
+  const quiet = insights.quietListings || [];
+  const taste = (insights.taste || []).filter((t) => t.yes + t.no >= 2);
+
   return {
     html: `
       <div class="tile" style="margin-bottom:12px">
@@ -523,7 +574,44 @@ function ledgerPanel(state, ctx) {
             ? 'Etsy receipts sync automatically.'
             : 'Add sales by hand, or connect Etsy to sync receipts.'
         }</p>
+        <p>Everything on this page is fed back into the agents' prompts, so the shop's own
+        results steer what gets made next.</p>
       </div>
+
+      ${
+        sellers.length
+          ? `<h4 style="margin:0 0 8px;font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--amber)">what actually sells</h4>
+             ${sellers
+               .map(
+                 (s) =>
+                   `<div class="lesson"><div><b>${esc(s.category)}</b><br />${esc(s.title)}</div>
+                    <span>${s.sales} × ${money(s.revenue, currency)}</span></div>`
+               )
+               .join('')}`
+          : ''
+      }
+
+      ${
+        quiet.length
+          ? `<h4 style="margin:18px 0 8px;font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--amber)">listed a month, no sales</h4>
+             <p class="quiet">${quiet.map((q) => esc(q.title)).join(' · ')}</p>`
+          : ''
+      }
+
+      ${
+        taste.length
+          ? `<h4 style="margin:18px 0 8px;font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--amber)">what you say yes to</h4>
+             ${taste
+               .map(
+                 (t) =>
+                   `<div class="lesson"><div><b>${esc(t.category)}</b><br />${esc(t.verdict)}</div>
+                    <span>${t.yes} yes · ${t.no} no</span></div>`
+               )
+               .join('')}`
+          : ''
+      }
+
+      <h4 style="margin:18px 0 8px;font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--amber)">record a sale</h4>
       <div class="bar" style="border:0">
         <input type="text" id="sale-sku" placeholder="sku" style="width:110px" />
         <input type="number" id="sale-amount" placeholder="amount" step="0.01" style="width:100px" />
@@ -549,6 +637,79 @@ function ledgerPanel(state, ctx) {
         if (!(amount > 0)) return ctx.toast('what amount?');
         await api.recordSale({ sku, amount });
         ctx.toast('recorded');
+        ctx.refresh(true);
+      });
+    },
+  };
+}
+
+function packhousePanel(state, ctx) {
+  const proposals = state.proposals || [];
+  const bundles = state.products.filter((p) => p.category === 'Bundles');
+  const variants = state.ideas.proposed.filter((i) => / — /.test(i.title));
+
+  return {
+    html: `
+      <p class="quiet" style="margin-bottom:14px">Bundles need no new design work: the Curator merges
+      pages from products you already sell, prices the set about 30% under buying them separately,
+      and it goes through the Scribe and the Inspector like anything else.</p>
+
+      ${
+        proposals.length
+          ? proposals
+              .map((p) => {
+                const approval = state.attention.find((a) => a.refId === p.id);
+                return `
+          <div class="tile" style="margin-bottom:10px">
+            <h4>${esc(p.title)}</h4>
+            <p>${esc(p.detail || '').split('\n').map(esc).join('<br />')}</p>
+            <p><b style="color:var(--amber)">${money(p.payload?.price, state.shop.currency)}</b>
+              instead of ${money(p.payload?.separate, state.shop.currency)} ·
+              status ${esc(p.status)}</p>
+            ${
+              approval
+                ? `<div class="actions">${approval.options
+                    .map(
+                      (o) =>
+                        `<button class="tiny" data-answer="${esc(approval.id)}" data-value="${esc(
+                          o.value
+                        )}">${esc(o.label)}</button>`
+                    )
+                    .join('')}</div>`
+                : ''
+            }
+          </div>`;
+              })
+              .join('')
+          : '<p class="quiet">No bundles suggested yet. The Curator needs at least two finished products in the same category.</p>'
+      }
+
+      <h4 style="margin:18px 0 8px;font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--amber)">bundles built (${bundles.length})</h4>
+      ${
+        bundles.length
+          ? bundles.map((p) => productCard(p, state)).join('')
+          : '<p class="quiet">None yet.</p>'
+      }
+
+      <h4 style="margin:18px 0 8px;font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--amber)">spin-offs waiting at the bench (${variants.length})</h4>
+      ${
+        variants.length
+          ? variants
+              .map(
+                (i) =>
+                  `<div class="lesson"><div><b>${esc(i.category)}</b><br />${esc(i.title)}</div>
+                   <span class="score" style="font-size:11px">${i.score ?? ''}</span></div>`
+              )
+              .join('')
+          : '<p class="quiet">None. The Curator only spins off products that have proven themselves.</p>'
+      }`,
+    mount(root) {
+      wireProducts(root, ctx);
+      root.addEventListener('click', async (e) => {
+        const id = e.target.dataset?.answer;
+        if (!id) return;
+        await api.answer(id, e.target.dataset.value);
+        ctx.toast('noted');
         ctx.refresh(true);
       });
     },

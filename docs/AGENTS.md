@@ -13,6 +13,7 @@ taught it into every prompt.
 | The Scribe | `copywriter.js` | Library | `copywriter.listing` |
 | The Inspector | `qa.js` | Review Hall | `qa.review` |
 | The Shopkeeper | `lister.js` | Shopfront | `lister.publish` |
+| The Curator | `curator.js` | Packhouse | `curator.scan`, `curator.bundle` |
 
 ## The Scout
 
@@ -85,6 +86,31 @@ The only agent that touches the outside world, and only after you have
 approved. Without Etsy credentials it writes an upload pack. With them it
 creates a **draft** listing. If the API refuses for any reason, it falls back to
 the upload pack and says so.
+
+## The Curator
+
+The cheapest growth in a digital shop is not another product from scratch — it
+is another way to sell what you have already made.
+
+**Bundles.** When two or more finished products suit the same buyer, it
+proposes selling them together at about 30% off the combined price. On approval
+it merges their pages into one document, adds a contents page, and the result
+goes through the Scribe and the Inspector like any other product. No new design
+work happens.
+
+**Variants.** When something has earned money, it proposes the same product
+again for a different buyer: US Letter, ink-saver, teen, dyslexia-friendly,
+large print, one-page. Those land at the Research Bench as ordinary ideas for
+you to approve or reject.
+
+Guards worth knowing about, because they are what stop this turning into spam:
+
+- It never bundles anything unfinished, and never bundles the same product
+  twice.
+- It never spins off a bundle — a variant of a bundle is a mess.
+- It stops proposing spin-offs once four are already waiting for your decision.
+- Without any sales data it will spin off the single best thing built so far,
+  and no more, rather than guessing at scale.
 
 ## Adding your own
 

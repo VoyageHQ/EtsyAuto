@@ -60,6 +60,13 @@ const PROPS = {
     p.fill(13 * U, 8.4 * U, 1.4 * U, 1.4 * U, hex('#8fc9a0'));
     p.fill(14 * U, 7 * U, 1.4 * U, 1.4 * U, hex('#8fc9a0'));
   },
+  curator: (p, body) => {
+    // stacked crates
+    p.fill(11 * U, 9 * U, 4 * U, 3.4 * U, hex('#b08a5a'));
+    p.fill(11 * U, 10.4 * U, 4 * U, 0.6 * U, mix(INK, 90));
+    p.fill(11.8 * U, 5.4 * U, 3.4 * U, 3 * U, hex('#c99e6a'));
+    p.fill(11.8 * U, 6.6 * U, 3.4 * U, 0.6 * U, mix(INK, 90));
+  },
   lister: (p, body) => {
     // shop awning above, parcel in hand
     for (let i = 0; i < 8; i++) {

@@ -7,6 +7,7 @@ import Maker from './maker.js';
 import Copywriter from './copywriter.js';
 import QA from './qa.js';
 import Lister from './lister.js';
+import Curator from './curator.js';
 
 const instances = [
   new Manager(),
@@ -16,6 +17,7 @@ const instances = [
   new Copywriter(),
   new QA(),
   new Lister(),
+  new Curator(),
 ];
 
 export const agents = new Map(instances.map((a) => [a.id, a]));

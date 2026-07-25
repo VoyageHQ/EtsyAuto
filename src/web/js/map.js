@@ -745,6 +745,43 @@ const BUILDINGS = {
       ctx.fillRect(x + 54, y + 42, 2, 3);
     },
   },
+  barn: {
+    size: { w: 6, h: 4 },
+    draw(ctx, x, y) {
+      const w = 6 * TILE;
+      // body
+      ctx.fillStyle = '#8a4f42';
+      ctx.fillRect(x + 4, y + 20, w - 8, 30);
+      ctx.fillStyle = '#6f3f35';
+      ctx.fillRect(x + 4, y + 48, w - 8, 2);
+      // white trim
+      ctx.fillStyle = '#e8dcc6';
+      ctx.fillRect(x + 4, y + 20, w - 8, 2);
+      ctx.fillRect(x + 4, y + 33, w - 8, 1);
+      // gambrel roof
+      gable(ctx, x + 1, y + 10, w - 2, 11, '#5f4433', '#4a3527');
+      ctx.fillStyle = '#4a3527';
+      ctx.fillRect(x + 2, y + 19, w - 4, 2);
+      // big cross doors
+      ctx.fillStyle = '#6b4a3a';
+      ctx.fillRect(x + 24, y + 30, 24, 20);
+      ctx.fillStyle = '#e8dcc6';
+      ctx.fillRect(x + 24, y + 38, 24, 2);
+      ctx.fillRect(x + 35, y + 30, 2, 20);
+      // hay loft
+      ctx.fillStyle = '#2a3946';
+      ctx.fillRect(x + 32, y + 13, 8, 6);
+      ctx.fillStyle = '#d9c07a';
+      ctx.fillRect(x + 33, y + 16, 6, 3);
+      // crates stacked outside
+      ctx.fillStyle = '#b08a5a';
+      ctx.fillRect(x + 6, y + 40, 10, 9);
+      ctx.fillRect(x + 8, y + 32, 8, 8);
+      ctx.fillStyle = '#8a6b44';
+      ctx.fillRect(x + 6, y + 44, 10, 1);
+      ctx.fillRect(x + 8, y + 36, 8, 1);
+    },
+  },
   stalls: {
     size: { w: 8, h: 3 },
     draw(ctx, x, y) {

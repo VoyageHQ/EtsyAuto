@@ -158,6 +158,46 @@ CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT
 );
+
+-- What the agents' brain has cost, so a runaway loop cannot quietly spend
+-- money. Rows are per model call.
+CREATE TABLE IF NOT EXISTS spend (
+  id           TEXT PRIMARY KEY,
+  day          TEXT NOT NULL,   -- YYYY-MM-DD, local
+  agent_id     TEXT,
+  provider     TEXT,
+  model        TEXT,
+  in_tokens    INTEGER NOT NULL DEFAULT 0,
+  out_tokens   INTEGER NOT NULL DEFAULT 0,
+  estimated    INTEGER NOT NULL DEFAULT 0,  -- 1 when the provider gave no counts
+  created_at   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS spend_day ON spend(day);
+
+-- The Curator's suggestions: bundles of existing products, and spin-off
+-- variants of ones that sell. Kept separate from ideas because a bundle is
+-- assembled from things the shop already has rather than designed from nothing.
+CREATE TABLE IF NOT EXISTS proposals (
+  id         TEXT PRIMARY KEY,
+  kind       TEXT NOT NULL,   -- bundle | variant
+  title      TEXT NOT NULL,
+  detail     TEXT,
+  payload    TEXT,            -- json: member product ids, prices, twist
+  status     TEXT NOT NULL,   -- open | accepted | declined | done
+  created_at INTEGER NOT NULL,
+  decided_at INTEGER
+);
+
+-- Repeated quality problems, so the Inspector can teach rather than just reject.
+CREATE TABLE IF NOT EXISTS failures (
+  id         TEXT PRIMARY KEY,
+  product_id TEXT,
+  agent_id   TEXT,            -- whose fault it was
+  pattern    TEXT NOT NULL,   -- normalised problem class
+  detail     TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS failures_pattern ON failures(pattern);
 `);
 
 // --- generic helpers -------------------------------------------------------

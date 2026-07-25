@@ -53,6 +53,34 @@ export function createProductFromIdea(idea) {
   return product;
 }
 
+/**
+ * A product that was not designed from a single idea — a bundle assembled from
+ * things the shop already sells. It skips research, because everything in it
+ * has already been researched.
+ * @param {object} args { title, category, spec, price, ideaId, stage }
+ */
+export function createProduct({ title, category, spec, price, ideaId = null, stage = 'design' }) {
+  const id = uid('prod');
+  const sku = nextSku('HV');
+  insert('products', {
+    id,
+    sku,
+    idea_id: ideaId,
+    title,
+    category,
+    stage,
+    status: 'active',
+    spec: spec ?? null,
+    research: null,
+    price: price ?? null,
+    dir: `${sku}-${slug(title, 48)}`,
+    created_at: now(),
+    updated_at: now(),
+  });
+  pushState('product');
+  return getProduct(id);
+}
+
 /** Queue whoever owns the product's current stage. */
 export function scheduleStage(product) {
   const owner = STAGE_OWNER[product.stage];

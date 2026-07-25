@@ -11,6 +11,7 @@
 import config from './config.js';
 import { extractJson } from './util.js';
 import { log } from './events.js';
+import { estimate, overBudget, record } from './spend.js';
 
 const provider = config.llm.provider;
 
@@ -43,6 +44,10 @@ export const llm = {
    */
   async complete(opts) {
     if (!this.enabled) throw new OfflineError();
+    // Out of budget is treated exactly like having no model: the agent falls
+    // back to its own craft and the shop keeps running.
+    if (overBudget()) throw new OfflineError('daily token cap reached');
+
     const attempt = async (tryNo) => {
       try {
         return provider === 'anthropic' ? await callAnthropic(opts) : await callOpenAI(opts);
@@ -52,7 +57,16 @@ export const llm = {
         return attempt(tryNo + 1);
       }
     };
-    return attempt(1);
+
+    const { text, usage } = await attempt(1);
+    record({
+      agent: opts.agent,
+      model: opts.model || (provider === 'anthropic' ? config.llm.anthropicModel : config.llm.model),
+      inTokens: usage?.input ?? estimate(`${opts.system || ''}${opts.prompt || ''}`),
+      outTokens: usage?.output ?? estimate(text),
+      estimated: !usage,
+    });
+    return text;
   },
 
   /**
@@ -80,8 +94,8 @@ export const llm = {
 };
 
 export class OfflineError extends Error {
-  constructor() {
-    super('No model configured (LLM_PROVIDER=offline)');
+  constructor(why = 'no model configured (LLM_PROVIDER=offline)') {
+    super(`Working offline: ${why}`);
     this.name = 'OfflineError';
     this.offline = true;
   }
@@ -127,11 +141,15 @@ async function callAnthropic({ system, prompt, maxTokens = 2000, temperature = 1
     },
     body: JSON.stringify(body),
   });
-  return (data.content || [])
+  const text = (data.content || [])
     .filter((block) => block.type === 'text')
     .map((block) => block.text)
     .join('')
     .trim();
+  const usage = data.usage
+    ? { input: data.usage.input_tokens, output: data.usage.output_tokens }
+    : null;
+  return { text, usage };
 }
 
 async function callOpenAI({ system, prompt, maxTokens = 2000, temperature = 1, model }) {
@@ -151,7 +169,11 @@ async function callOpenAI({ system, prompt, maxTokens = 2000, temperature = 1, m
       ],
     }),
   });
-  return (data.choices?.[0]?.message?.content || '').trim();
+  const text = (data.choices?.[0]?.message?.content || '').trim();
+  const usage = data.usage
+    ? { input: data.usage.prompt_tokens, output: data.usage.completion_tokens }
+    : null;
+  return { text, usage };
 }
 
 export default llm;

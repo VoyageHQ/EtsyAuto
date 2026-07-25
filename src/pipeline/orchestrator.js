@@ -117,6 +117,25 @@ function route(approval) {
     return;
   }
 
+  if (approval.kind === 'bundle') {
+    const proposal = one('SELECT * FROM proposals WHERE id = ?', approval.ref_id);
+    if (!proposal) return;
+    if (approval.answer === 'yes') {
+      update('proposals', proposal.id, { status: 'accepted', decided_at: now() });
+      enqueue({
+        agent: 'curator',
+        kind: 'curator.bundle',
+        subject: proposal.title,
+        payload: { proposalId: proposal.id },
+        priority: 3,
+      });
+    } else {
+      update('proposals', proposal.id, { status: 'declined', decided_at: now() });
+    }
+    pushState('approval-route');
+    return;
+  }
+
   if (approval.kind === 'question') {
     const product = getProduct(approval.ref_id);
     if (!product) return;

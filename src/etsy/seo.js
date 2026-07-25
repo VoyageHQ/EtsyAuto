@@ -57,6 +57,7 @@ export function buildTags(keywords = [], context = {}) {
   const seen = new Set();
   const tags = [];
   const add = (raw) => {
+    if (tags.length >= LIMITS.tagCount) return;
     const tag = cleanTag(raw);
     if (!tag || tag.length < 3 || seen.has(tag)) return;
     // Etsy ignores near-identical tags, so skip anything already covered.
@@ -67,11 +68,38 @@ export function buildTags(keywords = [], context = {}) {
   for (const keyword of keywords) add(keyword);
   if (context.category) add(context.category);
   if (context.audience) add(shortAudience(context.audience));
-  for (const extra of UNIVERSAL) {
-    if (tags.length >= LIMITS.tagCount) break;
-    add(extra);
-  }
+
+  // Leaving tag slots empty is leaving search traffic on the table, so top up
+  // from the product's own words before falling back to the generic ones.
+  for (const phrase of phrasesFromTitle(context.title)) add(phrase);
+  for (const extra of UNIVERSAL) add(extra);
+
   return tags.slice(0, LIMITS.tagCount);
+}
+
+/**
+ * Honest extra tags built from what the product is actually called — pairs of
+ * neighbouring words, then single words qualified by format.
+ */
+function phrasesFromTitle(title) {
+  const words = String(title || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((word) => word.length > 2 && !STOPWORDS.has(word));
+  if (!words.length) return [];
+
+  const phrases = [];
+  for (let i = 0; i < words.length - 1; i++) {
+    phrases.push(`${words[i]} ${words[i + 1]}`);
+  }
+  for (const word of words) {
+    for (const qualifier of ['printable', 'template', 'planner pdf']) {
+      if (word === qualifier) continue;
+      phrases.push(`${word} ${qualifier}`);
+    }
+  }
+  return phrases;
 }
 
 function shortAudience(audience) {

@@ -3,6 +3,7 @@
 import config from '../core/config.js';
 import { llm, OfflineError } from '../core/llm.js';
 import { lessonBlock } from '../core/memory.js';
+import { insightBlock } from '../core/insights.js';
 import { log, pushState } from '../core/events.js';
 import { setAgentState, one } from '../core/db.js';
 import { stationById } from '../core/stations.js';
@@ -92,6 +93,8 @@ export class Agent {
    * caller is expected to catch and handle with its own offline craft.
    */
   async think({ prompt, task = '', json = false, maxTokens = 2000, temperature = 1 }) {
+    // Order matters: the shop's own results, then the owner's rules last, so
+    // the rules win any argument.
     const system = [
       `You are ${this.name}, ${this.title} at ${config.shopName}, a one-person Etsy shop selling digital downloads.`,
       '',
@@ -100,15 +103,24 @@ export class Agent {
       SHOP_CONTEXT,
       '',
       `How you write: ${this.voice}`,
+      this.usesInsights === false ? '' : insightBlock(this.id),
       lessonBlock(this.id),
-    ].join('\n');
+    ]
+      .filter(Boolean)
+      .join('\n');
 
     const label = task || 'thinking';
     this.setStatus('working', label);
+    const options = {
+      system,
+      prompt,
+      maxTokens,
+      temperature,
+      model: this.modelHint,
+      agent: this.id,
+    };
     try {
-      const result = json
-        ? await llm.completeJson({ system, prompt, maxTokens, temperature, model: this.modelHint })
-        : await llm.complete({ system, prompt, maxTokens, temperature, model: this.modelHint });
+      const result = json ? await llm.completeJson(options) : await llm.complete(options);
       return result;
     } catch (err) {
       if (!(err instanceof OfflineError)) {

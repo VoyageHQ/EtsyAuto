@@ -69,6 +69,13 @@ export const config = {
     baseUrl: str('LLM_BASE_URL'),
     model: str('LLM_MODEL'),
     apiKey: str('LLM_API_KEY'),
+    // 0 means no cap. When the cap is reached the agents fall back to their
+    // offline craft for the rest of the day rather than spending more.
+    dailyTokens: num('LLM_DAILY_TOKENS', 0),
+    // Your model's rates per million tokens, if you want the meter in money as
+    // well as tokens. Rates change too often to hard-code.
+    costIn: num('LLM_COST_IN', 0),
+    costOut: num('LLM_COST_OUT', 0),
   },
 
   autoLoop: bool('AUTO_LOOP', true),

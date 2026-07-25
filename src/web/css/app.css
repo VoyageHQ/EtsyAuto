@@ -305,6 +305,20 @@ button {
   border-bottom: 1px solid var(--line);
   padding: 10px 12px 12px;
   min-height: 0;
+  flex: 0 0 auto;
+}
+
+/* A busy day should not push the agents off the bottom of the sidebar. */
+#attention {
+  max-height: 38vh;
+  overflow-y: auto;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+
+#agents {
+  max-height: 32vh;
+  overflow-y: auto;
 }
 
 .panel-grow {

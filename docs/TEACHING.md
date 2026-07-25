@@ -62,7 +62,15 @@ Lessons are cheap. A dozen sharp ones beat one long paragraph.
 | Page layouts, what a product must include | `maker` |
 | Listing voice, wording, what never to say | `copywriter` |
 | What gets rejected before it goes out | `qa` |
+| Which bundles and spin-offs get suggested | `curator` |
 | Shop-wide facts and forbidden words | `everyone` |
+
+## Lessons the agents write themselves
+
+The Inspector writes lessons too. The second time it rejects work for the same
+reason, it teaches whoever caused it the rule that prevents it — see
+[LEARNING.md](LEARNING.md). Those appear in the same list as yours, marked as
+coming from an agent, and you delete them the same way.
 
 ## Unteaching
 

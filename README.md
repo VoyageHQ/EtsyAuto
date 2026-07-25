@@ -28,8 +28,16 @@ nothing else.
    sends anything half-finished back to the Workshop.
 6. **The Shopkeeper** packs an upload folder — or creates a draft listing
    directly, if you have connected the Etsy API.
-7. **The Manager** keeps the whole thing moving and never approves anything
+7. **The Curator** turns what already works into more shop: bundles of
+   finished products at a discount, and spin-off editions of anything that
+   sells.
+8. **The Manager** keeps the whole thing moving and never approves anything
    itself.
+
+They get better as they go. Every prompt carries what the shop has actually
+learned — what sold, what has sat there for a month, which categories you say
+yes to and which you always turn down. See
+[docs/LEARNING.md](docs/LEARNING.md).
 
 Everything they produce lands in `out/<SKU>-<name>/`:
 
@@ -77,9 +85,10 @@ npm run make                 # work through the queue now
 | **Library** | Approved ideas and finished listing copy. |
 | **Review Hall** | The Inspector's queue, and anything that failed a check. |
 | **Shopfront** | Packed and live listings. Turn the images into PNGs here. |
+| **Packhouse** | Bundles and spin-offs the Curator has suggested. |
 | **Lookout** | What the Researcher thinks buyers want right now. |
 | **Calendar** | The season the shop is currently pushing for. |
-| **Ledger** | What the listings have actually earned. |
+| **Ledger** | Earnings, what sells, what does not, and what you keep approving. |
 
 The clock in the corner is real: the valley gets dark in the evening and the
 windows come on.
@@ -111,6 +120,11 @@ Three hard gates, and they are not configurable away:
 
 Anything waiting on you appears under **heads up** in the sidebar, and gets
 pushed to Discord with buttons if you have that switched on.
+
+There is a fourth rail on your wallet. Set `LLM_DAILY_TOKENS` and when the day's
+budget is spent the agents fall back to their offline craft rather than
+spending more — the shop keeps running, it just gets less inventive until
+midnight. The meter is in the Office.
 
 ## Teaching them
 
@@ -151,7 +165,8 @@ See [docs/PUBLISHING.md](docs/PUBLISHING.md).
 ## Reading the code
 
 ```
-src/core        config, sqlite, event bus, llm providers, lessons, approvals
+src/core        config, sqlite, event bus, llm providers, lessons, approvals,
+                insights, similarity, retro, spend
 src/agents      one file per villager, plus the Scout's idea corpus
 src/pipeline    the job queue and the product lifecycle
 src/design      vector doc → PDF/SVG/PNG, page templates, mockups
@@ -161,8 +176,8 @@ src/server      the dashboard API and static host
 src/web         the dashboard itself: canvas valley, sidebar, panels
 ```
 
-More detail in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
-[docs/AGENTS.md](docs/AGENTS.md).
+More detail in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
+[docs/AGENTS.md](docs/AGENTS.md) and [docs/LEARNING.md](docs/LEARNING.md).
 
 ```bash
 npm test      # the whole pipeline end to end, offline, in about a second

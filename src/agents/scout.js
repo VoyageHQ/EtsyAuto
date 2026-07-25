@@ -5,6 +5,7 @@ import { SEEDS, TWISTS, CATEGORIES } from './ideas-corpus.js';
 import { all, insert, count } from '../core/db.js';
 import { slug, uid, now, pick, shuffle, truncate, titleCase } from '../core/util.js';
 import { ask, cancelFor, openApprovals } from '../core/approvals.js';
+import { catalogue, closestMatch, tokens, TOO_SIMILAR } from '../core/similarity.js';
 import config from '../core/config.js';
 import { pushState } from '../core/events.js';
 
@@ -210,11 +211,23 @@ Return a JSON array. Each element:
   normalise(raw, existing) {
     const list = Array.isArray(raw) ? raw : Array.isArray(raw?.ideas) ? raw.ideas : [];
     const seen = new Set(existing);
+    // Near-duplicate guard: "Weekly Meal Planner" and "Meal Planner Weekly
+    // Printable" are the same product, and exact title matching misses that.
+    const known = catalogue();
+    const skipped = [];
     const out = [];
     for (const item of list) {
       const title = truncate(String(item?.title || '').trim(), 90);
       if (!title || seen.has(title.toLowerCase())) continue;
+
+      const near = closestMatch(`${title} ${(item.keywords || []).join(' ')}`, known);
+      if (near.match && near.score >= TOO_SIMILAR) {
+        skipped.push(`${title} (too close to "${near.match.title}")`);
+        continue;
+      }
+
       seen.add(title.toLowerCase());
+      known.push({ kind: 'idea', title, bag: tokens(`${title} ${(item.keywords || []).join(' ')}`) });
       const effort = clampInt(item.effort, 1, 5, 3);
       const demand = clampInt(item.demand, 1, 5, 3);
       const priceLow = Number(item.priceLow) > 0 ? Number(item.priceLow) : 3;
@@ -234,6 +247,13 @@ Return a JSON array. Each element:
         priceLow,
         priceHigh,
         score: score({ effort, demand, priceLow, priceHigh }),
+      });
+    }
+
+    if (skipped.length) {
+      this.say(`Dropped ${skipped.length} near-duplicate(s): ${skipped.slice(0, 3).join('; ')}.`, {
+        kind: 'dupes',
+        discord: false,
       });
     }
     return out.sort((a, b) => b.score - a.score);

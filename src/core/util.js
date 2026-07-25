@@ -24,6 +24,8 @@ export function titleCase(text) {
   return String(text || '')
     .split(/\s+/)
     .map((word, i) => {
+      // Leave acronyms alone: "US Letter" must not become "Us Letter".
+      if (word.length <= 4 && word === word.toUpperCase() && /[A-Z]/.test(word)) return word;
       const lower = word.toLowerCase();
       if (i > 0 && small.has(lower)) return lower;
       return lower.charAt(0).toUpperCase() + lower.slice(1);

@@ -3,6 +3,7 @@
 import Agent from './base.js';
 import { getProduct, ideaFor, advance } from '../pipeline/products.js';
 import { setSetting } from '../core/db.js';
+import { cannibalWarning } from '../core/similarity.js';
 import { seasonHint } from './scout.js';
 import config from '../core/config.js';
 import { suggestPrice } from '../etsy/listing.js';
@@ -83,6 +84,15 @@ Return JSON:
 
     const clean = this.normalise(research, idea);
     const price = suggestPrice({ ...idea, price_low: clean.priceLow, price_high: clean.priceHigh }, 5);
+
+    // Two of your own listings fighting over the same search term is worse than
+    // one, so this gets flagged loudly rather than buried in the research blob.
+    const clash = cannibalWarning(idea.title, clean.keywords);
+    if (clash) {
+      clean.risks = [clash, ...(clean.risks || [])].slice(0, 6);
+      clean.cannibalises = true;
+      this.say(clash, { kind: 'overlap', level: 'warn', meta: { productId: product.id } });
+    }
 
     this.say(
       `${product.sku}: ${clean.verdict}. ${clean.verdictWhy} Best phrase: "${clean.keywords[0]}". ` +

@@ -10,6 +10,9 @@ import { queuedCount, recentJobs } from '../pipeline/queue.js';
 import { listProducts, getListing, assetsFor } from '../pipeline/products.js';
 import { llm } from '../core/llm.js';
 import { etsyEnabled } from '../etsy/api.js';
+import { insightsSummary } from '../core/insights.js';
+import { todayUsage, usageByAgent } from '../core/spend.js';
+import { failureSummary } from '../core/retro.js';
 import { money } from '../core/util.js';
 
 export function clock(date = new Date()) {
@@ -36,6 +39,9 @@ function stationCounts() {
     campaign: campaign ? `${campaign.name.toLowerCase()} ${daysLeft(campaign.ends_at)}` : null,
     salesTotal: salesTotal ? money(salesTotal, config.currency) : null,
     lookout: getSetting('lookout_note'),
+    bundles:
+      count("SELECT COUNT(*) FROM proposals WHERE status IN ('open','accepted')") +
+      count("SELECT COUNT(*) FROM products WHERE category = 'Bundles' AND stage != 'listed'"),
   };
 }
 
@@ -135,6 +141,12 @@ export function buildState() {
       total: Number(one('SELECT IFNULL(SUM(amount),0) AS t FROM sales')?.t || 0),
       sales: all('SELECT * FROM sales ORDER BY occurred_at DESC LIMIT 20'),
     },
+    insights: insightsSummary(),
+    budget: { ...todayUsage(), byAgent: usageByAgent() },
+    failures: failureSummary(6),
+    proposals: all("SELECT * FROM proposals WHERE status IN ('open','accepted') ORDER BY created_at DESC").map(
+      (row) => ({ ...row, payload: json(row.payload, {}) })
+    ),
     campaign: one('SELECT * FROM campaigns ORDER BY starts_at DESC LIMIT 1'),
   };
 }

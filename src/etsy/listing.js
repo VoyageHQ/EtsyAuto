@@ -54,7 +54,11 @@ export function buildListing({ idea, product, spec, pageCount, research, body })
   return {
     title,
     description,
-    tags: buildTags(keywords, { category: idea.category, audience: idea.audience }),
+    tags: buildTags(keywords, {
+      category: idea.category,
+      audience: idea.audience,
+      title: idea.title,
+    }),
     materials: buildMaterials(spec),
     price,
     files: (pageCount && `${pageCount} pages`) || null,

@@ -8,6 +8,7 @@ import config from '../core/config.js';
 import { getProduct, ideaFor, assetsFor, getListing, setStage } from '../pipeline/products.js';
 import { auditListing } from '../etsy/seo.js';
 import { ask } from '../core/approvals.js';
+import { recordFailures } from '../core/retro.js';
 import { money } from '../core/util.js';
 
 export class QA extends Agent {
@@ -115,6 +116,9 @@ Empty arrays are a perfectly good answer.`.trim(),
         `${product.sku} sent back. ${problems.length} problem(s): ${problems.slice(0, 3).join(' · ')}`,
         { kind: 'rejected', level: 'warn', meta: { productId: product.id, problems } }
       );
+      // Second time seeing a problem class? Teach whoever caused it, so the
+      // same rejection does not keep happening.
+      recordFailures(product.id, problems);
       setStage(product.id, 'design', { status: 'blocked' });
       ask({
         kind: 'question',

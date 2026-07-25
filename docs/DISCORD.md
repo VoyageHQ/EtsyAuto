@@ -14,7 +14,7 @@ First, two things that trip everyone up:
 
 ## The roster
 
-Seven agents, seven bot accounts, seven channels.
+Eight agents, eight bot accounts, eight channels.
 
 | # | Bot name | Channel to create | Token goes in `.env` as |
 | --- | --- | --- | --- |
@@ -25,6 +25,7 @@ Seven agents, seven bot accounts, seven channels.
 | 5 | The Scribe | `#the-scribe` | `DISCORD_TOKEN_COPYWRITER` |
 | 6 | The Inspector | `#the-inspector` | `DISCORD_TOKEN_QA` |
 | 7 | The Shopkeeper | `#the-shopkeeper` | `DISCORD_TOKEN_LISTER` |
+| 8 | The Curator | `#the-curator` | `DISCORD_TOKEN_CURATOR` |
 
 Plus one channel called **`#valley-hq`** — anything that needs a decision from
 you lands there with buttons to tap.
@@ -36,7 +37,7 @@ never have to remember it.
 
 ## In the developer portal
 
-Go to <https://discord.com/developers/applications> and do this **seven
+Go to <https://discord.com/developers/applications> and do this **eight
 times**, once per agent:
 
 1. **New Application** → name it exactly as in the *Bot name* column.
@@ -102,11 +103,11 @@ straight away.
 
 ## The shortcut version
 
-If seven applications feels like too much admin, put a single token in
+If eight applications feels like too much admin, put a single token in
 `DISCORD_BOT_TOKEN` instead and skip the rest. Every agent still posts in its
 own channel under its own name and avatar, because messages go out through
 per-channel webhooks — but there will be one bot in the member list rather than
-seven. You can mix the two: any agent with its own token uses it, everyone else
+eight. You can mix the two: any agent with its own token uses it, everyone else
 shares.
 
 ## Channel naming

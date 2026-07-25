@@ -83,6 +83,16 @@ export const STATIONS = [
     counterLabel: (n) => (n ? `${n} live` : 'shutters down'),
   },
   {
+    id: 'packhouse',
+    name: 'Packhouse',
+    building: 'barn',
+    tile: { x: 16, y: 8 },
+    door: { x: 19, y: 13 },
+    blurb: 'The Curator packs finished products into bundles and spin-offs.',
+    counter: 'bundles',
+    counterLabel: (n) => (n ? `${n} packing` : 'crates empty'),
+  },
+  {
     id: 'lookout',
     name: 'Lookout',
     building: 'tower',
@@ -138,6 +148,10 @@ export const PATHS = [
   [
     { x: 49, y: 30 },
     { x: 49, y: 31 },
+  ],
+  [
+    { x: 19, y: 13 },
+    { x: 19, y: 21 },
   ],
 ];
 
