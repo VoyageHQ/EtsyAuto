@@ -67,8 +67,8 @@ Lessons are cheap. A dozen sharp ones beat one long paragraph.
 
 ## What they already know
 
-The agents do not start empty. Sixteen **knowledge packs** ship in the repo —
-around 280 lessons of real domain knowledge — and load into the lessons table
+The agents do not start empty. Twenty-one **knowledge packs** ship in the repo —
+around 340 lessons of real domain knowledge — and load into the lessons table
 every time the project starts.
 
 ```bash
@@ -111,6 +111,13 @@ that can be expressed as a check are also enforced in code:
 | Spelling variants Etsy treats as different words | Tag building |
 | Licence-needing or out-of-scope ventures | Analyst kills on sight |
 | Subscriptions priced below what fees allow | Analyst flags |
+| The seasonal calendar and its lead times | What the Manager asks the Scout for, all year |
+
+That last one is worth spelling out: the shop's campaign calendar is generated
+from the `listByMonth` table in the seasonal pack. Edit that table and the shop
+changes what it works on — in October it chases new year planners, in August
+it chases Halloween and Christmas. It is knowledge driving behaviour, not
+knowledge describing it.
 
 So the knowledge applies today, on your machine, with no API key.
 

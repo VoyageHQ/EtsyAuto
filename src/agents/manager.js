@@ -6,7 +6,8 @@ import { all, count, getSetting, setSetting, insert, one } from '../core/db.js';
 import { enqueue } from '../pipeline/queue.js';
 import { createProductFromIdea, listProducts, activeProductCount, scheduleStage } from '../pipeline/products.js';
 import { openApprovals } from '../core/approvals.js';
-import { uid, now } from '../core/util.js';
+import { uid, now, titleCase } from '../core/util.js';
+import { rulesFor } from '../knowledge/index.js';
 import { seasonHint } from './scout.js';
 
 const DAY = 86400000;
@@ -134,23 +135,44 @@ const safeJson = (value) => {
 };
 
 /**
- * Digital downloads sell on a calendar. This works out which run-up the shop
- * should be listing for, and gives it a hard end date.
+ * Digital downloads sell on a calendar, and the calendar the shop works to is
+ * the one in the seasonal knowledge pack — so editing the pack changes what
+ * the shop actually does, not just what it says in a prompt.
+ *
+ * The pack records the month by which each theme must already be listed. The
+ * season the shop should be working on is therefore the next one whose listing
+ * deadline has not yet passed.
  */
 export function nextSeason(date = new Date()) {
-  const year = date.getFullYear();
-  const seasons = [
-    { name: 'New year reset', theme: 'goal setting, budgets, fitness, organising', ends: new Date(year, 0, 31) },
-    { name: 'Spring clean', theme: 'cleaning schedules, home admin, Mother\'s Day', ends: new Date(year, 2, 31) },
-    { name: 'Exam season', theme: 'revision timetables, study planners, teacher printables', ends: new Date(year, 4, 31) },
-    { name: 'Summer holidays', theme: 'kids activity packs, travel planners, bucket lists', ends: new Date(year, 7, 20) },
-    { name: 'Back to school', theme: 'teacher planners, routines, school year organisers', ends: new Date(year, 8, 20) },
-    { name: 'Halloween', theme: 'halloween party printables and kids activities', ends: new Date(year, 9, 31) },
-    { name: 'Christmas run-up', theme: 'christmas planners, advent activities, gift budgets', ends: new Date(year, 11, 20) },
-    { name: 'New year reset', theme: 'goal setting, budgets, fitness, organising', ends: new Date(year + 1, 0, 31) },
-  ];
-  const season = seasons.find((s) => s.ends.getTime() > date.getTime()) || seasons[seasons.length - 1];
-  return { name: `${season.name} ${season.ends.getFullYear()}`, theme: season.theme, endsAt: season.ends.getTime() };
+  const listBy = rulesFor('manager').listByMonth || {};
+  const month = date.getMonth();
+
+  // Themes grouped by the month they must be live in, soonest first from here.
+  const upcoming = Object.entries(listBy)
+    .map(([theme, byMonth]) => ({
+      theme,
+      byMonth,
+      // How many months away, wrapping round the year end.
+      distance: (byMonth - month + 12) % 12,
+    }))
+    .sort((a, b) => a.distance - b.distance);
+
+  if (!upcoming.length) {
+    const ends = new Date(date.getFullYear(), month + 2, 1);
+    return { name: 'Steady work', theme: 'evergreen planners and trackers', endsAt: ends.getTime() };
+  }
+
+  // Everything sharing the nearest deadline becomes one campaign.
+  const soonest = upcoming[0].distance;
+  const themes = upcoming.filter((entry) => entry.distance === soonest);
+  const ends = new Date(date.getFullYear(), month + soonest + 1, 0);
+  if (ends.getTime() < date.getTime()) ends.setFullYear(ends.getFullYear() + 1);
+
+  return {
+    name: `${titleCase(themes[0].theme)} run-up`,
+    theme: themes.map((t) => t.theme).join(', '),
+    endsAt: ends.getTime(),
+  };
 }
 
 export default Manager;
