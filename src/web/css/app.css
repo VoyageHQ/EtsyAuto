@@ -65,7 +65,22 @@ button {
   align-items: center;
   gap: 8px;
   padding: 0 14px 0 12px;
+  border: 0;
   border-right: 1px solid var(--line);
+  background: none;
+}
+
+.brand:hover {
+  background: var(--panel);
+}
+
+.brand:hover .brand-swap {
+  color: var(--amber);
+}
+
+.brand-swap {
+  font-size: 11px;
+  color: var(--dimmer);
 }
 
 .brand-mark {

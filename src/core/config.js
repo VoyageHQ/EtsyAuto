@@ -78,6 +78,30 @@ export const config = {
     costOut: num('LLM_COST_OUT', 0),
   },
 
+  ventures: {
+    // Which research sources the Prospector may use.
+    sources: str('VENTURE_SOURCES', 'hackernews,reddit')
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
+    subreddits: str('VENTURE_SUBREDDITS', '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+    feeds: str('VENTURE_FEEDS', '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+    redditToken: str('REDDIT_TOKEN'),
+    // How many ventures may be in build at once. One is the honest answer for
+    // a person with a day job.
+    maxActive: num('VENTURE_MAX_ACTIVE', 1),
+    // The Analyst kills anything that cannot plausibly take money within this
+    // many days. Ideas without a path to revenue are hobbies.
+    maxDaysToRevenue: num('VENTURE_MAX_DAYS_TO_REVENUE', 90),
+    dir: str('VENTURE_DIR', 'ventures'),
+  },
+
   autoLoop: bool('AUTO_LOOP', true),
   tickSeconds: num('TICK_SECONDS', 20),
   ideaBacklogTarget: num('IDEA_BACKLOG_TARGET', 18),

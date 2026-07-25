@@ -9,6 +9,8 @@ import { buildState, productDetail } from './state.js';
 import { answer as answerApproval } from '../core/approvals.js';
 import { teach, forget } from '../core/memory.js';
 import { decideIdeas, requestIdeas, rebuild, tick, start, stop, isRunning } from '../pipeline/orchestrator.js';
+import { decideVenture, setCampaignStatus } from '../ventures/pipeline.js';
+import { enqueue } from '../pipeline/queue.js';
 import { insert, setSetting, getSetting, update, one } from '../core/db.js';
 import { uid, now } from '../core/util.js';
 import { assetsFor, getProduct } from '../pipeline/products.js';
@@ -180,6 +182,52 @@ const routes = [
 
   ['POST', /^\/api\/lessons\/([\w-]+)\/forget$/, async (req, res, [, id]) => ({ forgotten: forget(id) })],
 
+  // --- the venture arm -----------------------------------------------------
+
+  ['POST', /^\/api\/ventures\/([\w-]+)\/decide$/, async (req, res, [, id]) => {
+    const body = await readBody(req);
+    return decideVenture(id, body.decision, body.note || '', 'dashboard');
+  }],
+
+  ['POST', /^\/api\/ventures\/harvest$/, async (req) => {
+    const body = await readBody(req);
+    return {
+      jobId: enqueue({
+        agent: 'prospector',
+        kind: 'prospector.harvest',
+        subject: 'requested by you',
+        payload: { count: Number(body.count) || 5, perPhrase: Number(body.perPhrase) || 5 },
+        priority: 2,
+        unique: false,
+      }),
+    };
+  }],
+
+  ['POST', /^\/api\/campaigns\/([\w-]+)\/status$/, async (req, res, [, id]) => {
+    const body = await readBody(req);
+    const allowed = ['draft', 'approved', 'running', 'paused', 'done'];
+    if (!allowed.includes(body.status)) throw httpError(400, 'Unknown status.');
+    setCampaignStatus(id, body.status);
+    return { status: body.status };
+  }],
+
+  ['POST', /^\/api\/ventures\/([\w-]+)\/revenue$/, async (req, res, [, id]) => {
+    const body = await readBody(req);
+    const amount = Number(body.amount);
+    if (!(amount > 0)) throw httpError(400, 'Amount must be a number.');
+    insert('venture_revenue', {
+      id: uid('vrev'),
+      venture_id: id,
+      amount,
+      currency: config.currency,
+      kind: body.kind || 'one-off',
+      note: body.note || null,
+      occurred_at: now(),
+    });
+    log({ kind: 'revenue', level: 'good', message: `Venture revenue recorded: ${amount}` });
+    return { ok: true };
+  }],
+
   ['POST', /^\/api\/tick$/, async () => ({ worked: await tick() })],
 
   ['POST', /^\/api\/loop$/, async (req) => {
@@ -258,6 +306,16 @@ export function createDashboardServer() {
       }
 
       // Generated product files: out/... only, never anywhere else on disk.
+      // The venture arm's generated projects, so you can read what was built.
+      if (path.startsWith(`/${config.ventures.dir}/`)) {
+        const rel = normalize(path.slice(1));
+        const base = join(config.root, config.ventures.dir);
+        const abs = join(config.root, rel);
+        if (!abs.startsWith(base)) throw httpError(403, 'Nope.');
+        if (await serveFile(res, abs)) return;
+        throw httpError(404, 'No such file.');
+      }
+
       if (path.startsWith('/out/')) {
         const rel = normalize(path.slice(1));
         if (!rel.startsWith('out/')) throw httpError(403, 'Nope.');

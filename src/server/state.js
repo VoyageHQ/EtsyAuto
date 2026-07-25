@@ -1,7 +1,16 @@
 // Everything the dashboard needs, in one payload.
 import config from '../core/config.js';
 import { all, count, getSetting, json, one } from '../core/db.js';
-import { STATIONS, PLAZA, POND, PATHS } from '../core/stations.js';
+import { STATIONS, PLAZA, POND, PATHS, WORLDS } from '../core/stations.js';
+import { DIVISIONS } from '../core/divisions.js';
+import {
+  listVentures,
+  recentSignals,
+  ventureAssets,
+  ventureRevenue,
+  allCampaigns,
+} from '../ventures/pipeline.js';
+import Prospector from '../agents/prospector.js';
 import { roster } from '../agents/registry.js';
 import { recentEvents } from '../core/events.js';
 import { openApprovals } from '../core/approvals.js';
@@ -42,6 +51,15 @@ function stationCounts() {
     bundles:
       count("SELECT COUNT(*) FROM proposals WHERE status IN ('open','accepted')") +
       count("SELECT COUNT(*) FROM products WHERE category = 'Bundles' AND stage != 'listed'"),
+
+    // The harbour.
+    signals: count('SELECT COUNT(*) FROM signals'),
+    venturesActive: count("SELECT COUNT(*) FROM ventures WHERE status IN ('approved','building') AND stage != 'live'"),
+    venturesUnderReview: count("SELECT COUNT(*) FROM ventures WHERE stage = 'analysis' AND status IN ('proposed','approved')"),
+    venturesPlanning: count("SELECT COUNT(*) FROM ventures WHERE stage = 'plan'"),
+    venturesBuilding: count("SELECT COUNT(*) FROM ventures WHERE stage IN ('build','marketing') AND status != 'live'"),
+    venturesLive: count("SELECT COUNT(*) FROM ventures WHERE stage = 'live'"),
+    campaignsLive: count("SELECT COUNT(*) FROM marketing WHERE status IN ('approved','running')"),
   };
 }
 
@@ -90,6 +108,10 @@ export function buildState() {
       discord: { connected: Boolean(getSetting('discord_ready')) },
       autoLoop: config.autoLoop,
     },
+    // The dashboard shows one district at a time; both travel in the payload
+    // because the whole thing is small and swapping instantly feels better.
+    worlds: WORLDS,
+    divisions: DIVISIONS,
     world: { stations: STATIONS, plaza: PLAZA, pond: POND, paths: PATHS },
     counts,
     agents: roster(),
@@ -141,6 +163,47 @@ export function buildState() {
       total: Number(one('SELECT IFNULL(SUM(amount),0) AS t FROM sales')?.t || 0),
       sales: all('SELECT * FROM sales ORDER BY occurred_at DESC LIMIT 20'),
     },
+    ventures: listVentures().map((v) => ({
+      id: v.id,
+      slug: v.slug,
+      name: v.name,
+      oneLiner: v.one_liner,
+      problem: v.problem,
+      audience: v.audience,
+      solution: v.solution,
+      monetisation: v.monetisation,
+      analysis: v.analysis,
+      plan: v.plan,
+      evidence: v.evidence,
+      effort: v.effort,
+      confidence: v.confidence,
+      score: v.score,
+      status: v.status,
+      stage: v.stage,
+      dir: v.dir,
+      note: v.note,
+      createdAt: v.created_at,
+      assets: ventureAssets(v.id).map((a) => ({
+        kind: a.kind,
+        label: a.label,
+        path: a.path,
+        bytes: a.bytes,
+      })),
+      revenue: ventureRevenue(v.id),
+    })),
+    signals: recentSignals(40).map((s) => ({
+      id: s.id,
+      source: s.source,
+      title: s.title,
+      text: s.text,
+      url: s.url,
+      phrase: s.phrase,
+      channel: s.channel,
+      postedAt: s.posted_at,
+      used: s.used,
+    })),
+    sources: Prospector.sourceStatus(),
+    campaigns: allCampaigns(),
     insights: insightsSummary(),
     budget: { ...todayUsage(), byAgent: usageByAgent() },
     failures: failureSummary(6),

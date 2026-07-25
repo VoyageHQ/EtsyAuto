@@ -14,7 +14,9 @@ First, two things that trip everyone up:
 
 ## The roster
 
-Eight agents, eight bot accounts, eight channels.
+Fourteen agents across two businesses. Each can have its own bot account, name,
+avatar and channel — or you can run one shared bot and skip the admin (see the
+shortcut at the bottom).
 
 | # | Bot name | Channel to create | Token goes in `.env` as |
 | --- | --- | --- | --- |
@@ -27,6 +29,17 @@ Eight agents, eight bot accounts, eight channels.
 | 7 | The Shopkeeper | `#the-shopkeeper` | `DISCORD_TOKEN_LISTER` |
 | 8 | The Curator | `#the-curator` | `DISCORD_TOKEN_CURATOR` |
 
+And the venture arm:
+
+| # | Bot name | Channel to create | Token goes in `.env` as |
+| --- | --- | --- | --- |
+| 9 | The Harbourmaster | `#the-harbourmaster` | `DISCORD_TOKEN_HARBOURMASTER` |
+| 10 | The Prospector | `#the-prospector` | `DISCORD_TOKEN_PROSPECTOR` |
+| 11 | The Analyst | `#the-analyst` | `DISCORD_TOKEN_ANALYST` |
+| 12 | The Architect | `#the-architect` | `DISCORD_TOKEN_ARCHITECT` |
+| 13 | The Builder | `#the-builder` | `DISCORD_TOKEN_BUILDER` |
+| 14 | The Marketer | `#the-marketer` | `DISCORD_TOKEN_MARKETER` |
+
 Plus one channel called **`#valley-hq`** — anything that needs a decision from
 you lands there with buttons to tap.
 
@@ -37,8 +50,9 @@ never have to remember it.
 
 ## In the developer portal
 
-Go to <https://discord.com/developers/applications> and do this **eight
-times**, once per agent:
+Go to <https://discord.com/developers/applications> and do this once per agent
+you want as its own member. You do not have to do all fourteen — start with the
+ones you actually want to hear from, and the rest share one bot:
 
 1. **New Application** → name it exactly as in the *Bot name* column.
 2. Open the **Bot** tab → **Reset Token** → copy it.
@@ -103,11 +117,11 @@ straight away.
 
 ## The shortcut version
 
-If eight applications feels like too much admin, put a single token in
+If fourteen applications feels like too much admin, put a single token in
 `DISCORD_BOT_TOKEN` instead and skip the rest. Every agent still posts in its
 own channel under its own name and avatar, because messages go out through
 per-channel webhooks — but there will be one bot in the member list rather than
-eight. You can mix the two: any agent with its own token uses it, everyone else
+fourteen. You can mix the two: any agent with its own token uses it, everyone else
 shares.
 
 ## Channel naming

@@ -114,7 +114,11 @@ export function shopTotals() {
  * @param {'scout'|'researcher'|'maker'|'copywriter'|'curator'|string} agentId
  * @returns {string} '' when the shop has no history worth mentioning yet
  */
-export function insightBlock(agentId) {
+export function insightBlock(agentId, division = 'etsy') {
+  // The venture arm gets its own numbers, never the shop's. Letting Etsy
+  // results steer startup decisions would be worse than no data at all.
+  if (division === 'ventures') return ventureInsightBlock();
+
   const lines = [];
   const totals = shopTotals();
   const sellers = topSellers(4);
@@ -182,6 +186,45 @@ export function insightBlock(agentId) {
     '',
     'WHAT THIS SHOP HAS LEARNED SO FAR — real numbers from its own listings, not',
     'guesses. Weigh this more heavily than your instincts about the market.',
+    ...lines.map((line) => `- ${line}`),
+  ].join('\n');
+}
+
+/**
+ * The venture arm's own history. Kept deliberately thin: with one or two
+ * ventures there is very little to learn from, and pretending otherwise would
+ * be worse than saying nothing.
+ */
+export function ventureInsightBlock() {
+  const lines = [];
+  const live = all("SELECT name, slug FROM ventures WHERE stage = 'live'");
+  const killed = all(
+    "SELECT name, note FROM ventures WHERE status IN ('killed','rejected') ORDER BY decided_at DESC LIMIT 5"
+  );
+  const revenue = Number(one('SELECT IFNULL(SUM(amount), 0) AS t FROM venture_revenue')?.t || 0);
+  const signalTotal = Number(one('SELECT COUNT(*) AS c FROM signals')?.c || 0);
+
+  if (live.length) {
+    lines.push(`Already live: ${live.map((v) => v.name).join(', ')}. Do not propose these again.`);
+  }
+  if (revenue > 0) {
+    lines.push(`The venture arm has taken ${money(revenue, config.currency)} so far.`);
+  }
+  if (killed.length) {
+    lines.push(
+      'Turned down or killed before, with the reason: ' +
+        killed.map((v) => `${v.name}${v.note ? ` — ${v.note}` : ''}`).join('; ') +
+        '.'
+    );
+  }
+  if (signalTotal) {
+    lines.push(`${signalTotal} harvested complaint(s) are on file to draw evidence from.`);
+  }
+  if (!lines.length) return '';
+
+  return [
+    '',
+    'WHAT THE VENTURE ARM HAS LEARNED SO FAR — its own history, not the shop\'s.',
     ...lines.map((line) => `- ${line}`),
   ].join('\n');
 }

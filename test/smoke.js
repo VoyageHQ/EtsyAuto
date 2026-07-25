@@ -6,8 +6,19 @@ import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import config from '../src/core/config.js';
 import { all, count, one, insert, update } from '../src/core/db.js';
-import { agentList } from '../src/agents/registry.js';
-import { STATION_IDS } from '../src/core/stations.js';
+import { agentList, agentsIn } from '../src/agents/registry.js';
+import { STATION_IDS, WORLDS } from '../src/core/stations.js';
+import {
+  saveSignals,
+  signalCount,
+  unusedSignals,
+  createVenture,
+  decideVenture,
+  getVenture,
+  campaignsFor,
+} from '../src/ventures/pipeline.js';
+import { synthesise, extractDesire } from '../src/ventures/synthesise.js';
+import { ventureInsightBlock } from '../src/core/insights.js';
 import { drain, decideIdeas, requestIdeas } from '../src/pipeline/orchestrator.js';
 import { enqueue } from '../src/pipeline/queue.js';
 import { listProducts, getListing, assetsFor } from '../src/pipeline/products.js';
@@ -37,7 +48,11 @@ function check(label, condition, detail = '') {
 console.log('\nSmoke test — the whole pipeline, offline\n');
 
 console.log('The fleet');
-check('eight agents on the roster', agentList().length === 8, `${agentList().length} found`);
+check(
+  'fourteen agents across two businesses',
+  agentList().length === 14,
+  `${agentList().length} found`
+);
 check(
   'one of them exists purely to invent products',
   agentList().some((a) => a.id === 'scout' && a.handles.includes('scout.brainstorm'))
@@ -275,6 +290,118 @@ console.log('\nBundling what already works');
       }
     }
   }
+}
+
+console.log('\nThe venture arm');
+{
+  check('the two businesses have separate agents', agentsIn('etsy').length >= 8 && agentsIn('ventures').length === 6);
+  check(
+    'no venture agent stands in the Etsy valley',
+    agentsIn('ventures').every((a) => WORLDS.harbour.stations.some((s) => s.id === a.home))
+  );
+  check(
+    'one agent exists purely to find startup ideas',
+    agentsIn('ventures').some((a) => a.id === 'prospector' && a.handles.includes('prospector.harvest'))
+  );
+  check(
+    'one agent exists purely to market them',
+    agentsIn('ventures').some((a) => a.id === 'marketer')
+  );
+
+  // The Prospector works from stored signals, so the test does not depend on
+  // any external service being reachable.
+  const fixtures = [
+    {
+      source: 'test',
+      externalId: 'fx1',
+      title: 'Invoice chasing is killing me',
+      text: 'I wish there was a way to chase unpaid invoices automatically. I spend hours every week on it.',
+      url: 'https://example.com/1',
+      author: 'a',
+      score: 40,
+      comments: 12,
+      phrase: 'i wish there was',
+      channel: 'r/freelance',
+      postedAt: Date.now() - 86400000,
+    },
+    {
+      source: 'test',
+      externalId: 'fx2',
+      title: 'Chasing invoices',
+      text: 'Is there a tool that will chase unpaid invoices for a small studio? We still use a spreadsheet.',
+      url: 'https://example.com/2',
+      author: 'b',
+      score: 22,
+      comments: 5,
+      phrase: 'is there a tool that',
+      channel: 'r/freelance',
+      postedAt: Date.now() - 3600000,
+    },
+  ];
+  check('signals are stored', saveSignals(fixtures) === 2 || signalCount() >= 2);
+  check('the same post is never harvested twice', saveSignals(fixtures) === 0);
+
+  const desire = extractDesire(fixtures[0].text, fixtures[0].phrase);
+  check('the actual want is extracted from the post', /chase unpaid invoices/i.test(desire), desire);
+
+  const candidates = synthesise(unusedSignals(50), 3);
+  check('complaints become candidate businesses', candidates.length >= 1);
+  const candidate = candidates[0];
+  if (candidate) {
+    check('   every candidate carries evidence', candidate.evidence.length >= 1);
+    check('   the evidence links back to a real post', Boolean(candidate.evidence[0].url));
+    check('   it says how it makes money', Number(candidate.monetisation?.price) > 0);
+    check('   and when the first payment could land', Number(candidate.monetisation?.daysToRevenue) > 0);
+  }
+
+  // Push one all the way through: analysis, plan, build, launch pack.
+  const venture = createVenture({ ...candidate, name: candidate.name + ' Test' });
+  decideVenture(venture.id, 'approved', '', 'test');
+  await drain(30);
+
+  const built = getVenture(venture.id);
+  check('an approved venture gets analysed', Boolean(built.analysis?.verdict));
+  check('   and scoped', Boolean(built.plan?.mvpGoal));
+  check('   and the scope says what is NOT being built', (built.plan?.notBuilding || []).length > 0);
+  check('   and scaffolded into real files', Boolean(built.dir));
+
+  if (built.dir) {
+    const dir = join(config.root, built.dir);
+    for (const file of ['server.js', 'public/index.html', 'public/styles.css', 'README.md', 'PLAN.md']) {
+      check(`   ${file} exists`, existsSync(join(dir, file)));
+    }
+    const page = readFileSync(join(dir, 'public/index.html'), 'utf8');
+    check('   the landing page quotes the real complaint', page.includes(built.evidence[0].quote.slice(0, 40)));
+    check('   and shows a price', page.includes(String(built.monetisation.price)));
+    const server = readFileSync(join(dir, 'server.js'), 'utf8');
+    check('   the server has a working waitlist endpoint', server.includes('/api/waitlist'));
+  }
+
+  const campaigns = campaignsFor(built.id);
+  check('a launch pack is prepared', campaigns.length >= 1);
+  check('   but it stays a draft until you approve it', campaigns[0]?.status === 'draft');
+  check(
+    '   and it never proposes spending your money on its own',
+    Number(campaigns[0]?.budget || 0) === 0
+  );
+  if (built.dir) {
+    for (const file of ['LAUNCH-PLAN.md', 'AD-COPY.md', 'CONTENT-CALENDAR.csv', 'POSITIONING.md']) {
+      check(`   marketing/${file} written`, existsSync(join(config.root, built.dir, 'marketing', file)));
+    }
+  }
+
+  const campaignAsk = openApprovals().find((a) => a.kind === 'campaign');
+  check('it asks before launching', Boolean(campaignAsk));
+
+  // The two businesses must not read each other's data.
+  check(
+    'venture agents are not told about the Etsy shop',
+    !ventureInsightBlock().includes('listing') || !ventureInsightBlock().includes('Etsy')
+  );
+  check(
+    'the shop\'s numbers never reach a venture prompt',
+    insightBlock('prospector', 'ventures') === ventureInsightBlock()
+  );
 }
 
 console.log('\nDiscord');

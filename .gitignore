@@ -19,3 +19,7 @@ node_modules/
 
 # keep the folders, not their contents
 !data/.gitkeep
+
+# generated venture projects: your code and real signup data
+ventures/**
+!ventures/.gitkeep

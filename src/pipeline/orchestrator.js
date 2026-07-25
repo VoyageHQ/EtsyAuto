@@ -4,6 +4,14 @@ import { bus, log, pushState } from '../core/events.js';
 import { getAgent } from '../agents/registry.js';
 import { claimNext, finish, fail, enqueue } from './queue.js';
 import { getProduct, setStage, scheduleStage, getIdea } from './products.js';
+import {
+  decideVenture,
+  getVenture,
+  listVentures,
+  scheduleVentureStage,
+  setCampaignStatus,
+  setVentureStage,
+} from '../ventures/pipeline.js';
 import { update, one, all } from '../core/db.js';
 import { now } from '../core/util.js';
 import { teach } from '../core/memory.js';
@@ -60,9 +68,11 @@ export function start() {
 
   const loop = async () => {
     try {
-      // The Manager plans, then whoever has queued work gets on with it.
+      // Each division's foreman plans its own side, then whoever has queued
+      // work gets on with it.
       enqueue({ agent: 'manager', kind: 'manager.plan', subject: 'planning', priority: 8 });
-      await drain(6);
+      enqueue({ agent: 'harbourmaster', kind: 'harbourmaster.plan', subject: 'planning', priority: 8 });
+      await drain(8);
     } catch (err) {
       log({ kind: 'error', level: 'error', message: `Tick blew up: ${err.message}` });
     }
@@ -131,6 +141,62 @@ function route(approval) {
       });
     } else {
       update('proposals', proposal.id, { status: 'declined', decided_at: now() });
+    }
+    pushState('approval-route');
+    return;
+  }
+
+  // --- the venture arm -----------------------------------------------------
+
+  if (approval.kind === 'venture') {
+    if (approval.answer === 'build') {
+      // "Build the one you recommended" — the top of the shortlist.
+      const best = listVentures("WHERE status = 'proposed'")[0];
+      if (best) decideVenture(best.id, 'approved', '', 'dashboard');
+    } else if (approval.answer === 'again') {
+      enqueue({
+        agent: 'prospector',
+        kind: 'prospector.harvest',
+        subject: 'another look',
+        payload: { count: 5 },
+        priority: 2,
+        unique: false,
+      });
+    }
+    // "shortlist" just opens the Lighthouse panel; nothing to do here.
+    pushState('approval-route');
+    return;
+  }
+
+  if (approval.kind === 'campaign') {
+    const campaign = one('SELECT * FROM marketing WHERE id = ?', approval.ref_id);
+    if (!campaign) return;
+    if (approval.answer === 'go') {
+      setCampaignStatus(campaign.id, 'running');
+      const venture = getVenture(campaign.venture_id);
+      if (venture) setVentureStage(venture.id, 'live', { status: 'live' });
+    } else if (approval.answer === 'revise') {
+      setCampaignStatus(campaign.id, 'draft');
+      const venture = getVenture(campaign.venture_id);
+      if (venture) {
+        setVentureStage(venture.id, 'marketing', {});
+        scheduleVentureStage(getVenture(venture.id));
+      }
+    } else {
+      setCampaignStatus(campaign.id, 'paused');
+    }
+    pushState('approval-route');
+    return;
+  }
+
+  if (approval.kind === 'question' && getVenture(approval.ref_id)) {
+    const venture = getVenture(approval.ref_id);
+    if (approval.answer === 'continue') {
+      // You overruled the Analyst. Carry on to the drawing office.
+      setVentureStage(venture.id, 'plan', { status: 'approved' });
+      scheduleVentureStage(getVenture(venture.id));
+    } else {
+      setVentureStage(venture.id, 'analysis', { status: 'rejected' });
     }
     pushState('approval-route');
     return;

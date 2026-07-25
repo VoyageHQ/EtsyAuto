@@ -40,6 +40,19 @@ const P = {
   awning: ['#b4726b', '#7f9a86', '#a8905f'],
 };
 
+/** The harbour is the same engine with a different coat: sandy, sparse, windy. */
+const COAST = {
+  grass: ['#6f7a5e', '#74805f', '#6a7659', '#78845f'],
+  grassDark: '#5f6b52',
+  grassLight: '#8a9269',
+  tuft: '#9aa374',
+  path: ['#a89b7c', '#9c8f72', '#b1a487'],
+  pathEdge: '#877c62',
+  treeChance: 0.05,
+};
+
+const INLAND = { treeChance: 0.17 };
+
 function mulberry32(seed) {
   let a = seed >>> 0;
   return function next() {
@@ -100,6 +113,7 @@ export class Valley {
 
   setWorld(world) {
     this.world = world;
+    this.ground = world.palette === 'coast' ? { ...P, ...COAST } : { ...P, ...INLAND };
     this.terrain = null;
     this.buildLabels();
     this.fit();
@@ -154,12 +168,13 @@ export class Valley {
   // --- terrain ------------------------------------------------------------
 
   buildTerrain() {
+    const G = this.ground || P;
     const rng = mulberry32(20260725);
     const grid = [];
     for (let y = 0; y < ROWS; y++) {
       grid[y] = [];
       for (let x = 0; x < COLS; x++) {
-        grid[y][x] = { kind: 'grass', shade: pick(rng, P.grass), deco: null };
+        grid[y][x] = { kind: 'grass', shade: pick(rng, G.grass), deco: null };
       }
     }
 
@@ -191,7 +206,7 @@ export class Valley {
             if (tx < 0 || ty < 0 || tx >= COLS || ty >= ROWS) continue;
             if (grid[ty][tx].kind === 'water') continue;
             if ((dx || dy) && rng() < 0.12) continue;
-            grid[ty][tx] = { kind: 'path', shade: pick(rng, P.path), deco: null };
+            grid[ty][tx] = { kind: 'path', shade: pick(rng, G.path), deco: null };
           }
         }
       }
@@ -222,7 +237,7 @@ export class Valley {
           continue;
         }
         const r = rng();
-        if (r < 0.17) {
+        if (r < (G.treeChance ?? 0.17)) {
           trees.push({ x, y, kind: rng() < 0.62 ? 'conifer' : 'round', size: 0.8 + rng() * 0.5 });
           blocked.add(`${x},${y}`);
           blocked.add(`${x + 1},${y}`);
@@ -243,6 +258,7 @@ export class Valley {
 
   /** The static half of the picture, drawn once into an offscreen canvas. */
   renderBase() {
+    const G = this.ground || P;
     const base = document.createElement('canvas');
     base.width = this.canvas.width;
     base.height = this.canvas.height;
@@ -260,7 +276,7 @@ export class Valley {
           // Break the tile up so the grid does not read as squares: a few
           // sub-blocks of a neighbouring shade, then some darker blades.
           for (let i = 0; i < 3; i++) {
-            ctx.fillStyle = rng() < 0.5 ? P.grassDark : P.grassLight;
+            ctx.fillStyle = rng() < 0.5 ? G.grassDark : G.grassLight;
             const bw = 2 + Math.floor(rng() * 4);
             ctx.fillRect(
               x * TILE + Math.floor(rng() * (TILE - bw)),
@@ -269,19 +285,19 @@ export class Valley {
               2 + Math.floor(rng() * 2)
             );
           }
-          ctx.fillStyle = P.grassDark;
+          ctx.fillStyle = G.grassDark;
           for (let i = 0; i < 2; i++) {
             ctx.fillRect(x * TILE + Math.floor(rng() * TILE), y * TILE + Math.floor(rng() * TILE), 1, 2);
           }
         }
         if (cell.kind === 'path') {
-          ctx.fillStyle = P.pathEdge;
+          ctx.fillStyle = G.pathEdge;
           for (let i = 0; i < 3; i++) {
             ctx.fillRect(x * TILE + Math.floor(rng() * TILE), y * TILE + Math.floor(rng() * TILE), 1, 1);
           }
         }
         if (cell.deco === 'tuft') {
-          ctx.fillStyle = P.tuft;
+          ctx.fillStyle = G.tuft;
           const px = x * TILE + 4;
           const py = y * TILE + 7;
           ctx.fillRect(px, py, 1, 3);
@@ -289,7 +305,7 @@ export class Valley {
           ctx.fillRect(px + 4, py, 1, 3);
         }
         if (cell.deco === 'flower') {
-          ctx.fillStyle = P.tuft;
+          ctx.fillStyle = G.tuft;
           ctx.fillRect(x * TILE + 5, y * TILE + 7, 1, 3);
           ctx.fillStyle = pick(rng, P.flower);
           ctx.fillRect(x * TILE + 4, y * TILE + 5, 3, 2);
@@ -533,6 +549,14 @@ function labelFor(station, value) {
 }
 
 const COUNT_LABELS = {
+  signals: 'signals',
+  venturesActive: 'in hand',
+  venturesUnderReview: 'on the books',
+  venturesPlanning: 'on the board',
+  venturesBuilding: 'in the slipway',
+  venturesLive: 'live',
+  campaignsLive: 'campaigns',
+  bundles: 'packing',
   jobsQueued: 'in flight',
   ideasProposed: 'rankable',
   ideasShelved: 'shelved',
@@ -542,6 +566,14 @@ const COUNT_LABELS = {
 };
 
 const DEFAULT_LABELS = {
+  signals: 'scanning',
+  venturesActive: 'quiet',
+  venturesUnderReview: 'ledgers closed',
+  venturesPlanning: 'drawings filed',
+  venturesBuilding: 'yard empty',
+  venturesLive: 'shutters down',
+  campaignsLive: 'no campaigns',
+  bundles: 'crates empty',
   jobsQueued: 'link up',
   ideasProposed: 'nothing new',
   ideasShelved: 'empty shelves',
@@ -743,6 +775,199 @@ const BUILDINGS = {
       ctx.fillStyle = P.windowLit;
       ctx.fillRect(x + 30, y + 42, 2, 3);
       ctx.fillRect(x + 54, y + 42, 2, 3);
+    },
+  },
+  // --- the harbour ---------------------------------------------------------
+  lighthouse: {
+    size: { w: 3, h: 8 },
+    draw(ctx, x, y) {
+      const cx = x + 18;
+      // tapering tower with red bands
+      for (let row = 0; row < 78; row++) {
+        const half = 8 + Math.floor((row / 78) * 6);
+        ctx.fillStyle = Math.floor(row / 13) % 2 === 0 ? '#e8e2d4' : '#b8544c';
+        ctx.fillRect(cx - half, y + 22 + row, half * 2, 1);
+      }
+      // lamp room
+      ctx.fillStyle = '#3b4a56';
+      ctx.fillRect(cx - 11, y + 12, 22, 4);
+      ctx.fillStyle = '#f5d98a';
+      ctx.fillRect(cx - 8, y + 16, 16, 7);
+      ctx.fillStyle = '#2a3946';
+      ctx.fillRect(cx - 9, y + 15, 18, 2);
+      ctx.fillRect(cx - 2, y + 16, 1, 7);
+      ctx.fillRect(cx + 3, y + 16, 1, 7);
+      // roof and finial
+      for (let row = 0; row < 8; row++) {
+        ctx.fillStyle = '#8b3f39';
+        ctx.fillRect(cx - 10 + row, y + 12 - row, 21 - row * 2, 1);
+      }
+      ctx.fillStyle = '#3b4a56';
+      ctx.fillRect(cx, y, 1, 5);
+      // base
+      ctx.fillStyle = '#8d949a';
+      ctx.fillRect(cx - 17, y + 92, 34, 8);
+      ctx.fillStyle = '#6f797e';
+      ctx.fillRect(cx - 17, y + 98, 34, 2);
+    },
+  },
+  'office-block': {
+    size: { w: 6, h: 6 },
+    draw(ctx, x, y) {
+      const w = 6 * TILE;
+      ctx.fillStyle = '#b9c2c8';
+      ctx.fillRect(x + 6, y + 14, w - 12, 58);
+      ctx.fillStyle = '#98a3aa';
+      ctx.fillRect(x + 6, y + 70, w - 12, 2);
+      ctx.fillRect(x + w - 10, y + 14, 4, 58);
+      // window grid
+      for (let row = 0; row < 4; row++) {
+        for (let col = 0; col < 4; col++) {
+          const lit = (row + col) % 3 !== 0;
+          ctx.fillStyle = lit ? '#f2d79b' : '#2a3946';
+          ctx.fillRect(x + 12 + col * 14, y + 20 + row * 12, 9, 8);
+        }
+      }
+      // parapet and flagpole
+      ctx.fillStyle = '#8d949a';
+      ctx.fillRect(x + 4, y + 10, w - 8, 5);
+      ctx.fillStyle = '#6f797e';
+      ctx.fillRect(x + 10, y - 6, 1, 16);
+      ctx.fillStyle = '#7fd1c4';
+      ctx.fillRect(x + 11, y - 6, 7, 4);
+      // door
+      ctx.fillStyle = '#3b4a56';
+      ctx.fillRect(x + 30, y + 60, 12, 12);
+      ctx.fillStyle = '#f2d79b';
+      ctx.fillRect(x + 31, y + 62, 4, 8);
+    },
+  },
+  'counting-house': {
+    size: { w: 5, h: 4 },
+    draw(ctx, x, y) {
+      const w = 5 * TILE;
+      ctx.fillStyle = '#cbbd9e';
+      ctx.fillRect(x + 4, y + 20, w - 8, 30);
+      ctx.fillStyle = '#a89c81';
+      ctx.fillRect(x + 4, y + 48, w - 8, 2);
+      // pillared front
+      for (const px of [8, 20, 32, 44]) {
+        ctx.fillStyle = '#e8e2d4';
+        ctx.fillRect(x + px, y + 24, 4, 24);
+      }
+      // pediment
+      gable(ctx, x + 1, y + 8, w - 2, 13, '#8d949a', '#6f797e');
+      ctx.fillStyle = '#d8b26a';
+      ctx.fillRect(x + 26, y + 14, 6, 6);
+      // steps
+      ctx.fillStyle = '#9aa3a8';
+      ctx.fillRect(x + 2, y + 50, w - 4, 4);
+    },
+  },
+  'drawing-office': {
+    size: { w: 5, h: 4 },
+    draw(ctx, x, y) {
+      const w = 5 * TILE;
+      ctx.fillStyle = '#9aa8b4';
+      ctx.fillRect(x + 4, y + 18, w - 8, 32);
+      // north-light sawtooth roof
+      for (let i = 0; i < 3; i++) {
+        const sx = x + 4 + i * 18;
+        ctx.fillStyle = '#6f7d8a';
+        ctx.fillRect(sx, y + 10, 18, 9);
+        ctx.fillStyle = '#bcd6e4';
+        for (let row = 0; row < 8; row++) ctx.fillRect(sx + row, y + 18 - row, 2, 1);
+      }
+      // big drafting windows
+      for (const wx of [8, 24, 40]) {
+        ctx.fillStyle = '#2a3946';
+        ctx.fillRect(x + wx, y + 24, 12, 14);
+        ctx.fillStyle = '#f2d79b';
+        ctx.fillRect(x + wx + 1, y + 25, 10, 12);
+        ctx.fillStyle = '#2a3946';
+        ctx.fillRect(x + wx + 5, y + 25, 1, 12);
+      }
+      ctx.fillStyle = '#3b4a56';
+      ctx.fillRect(x + 26, y + 40, 10, 10);
+    },
+  },
+  boatyard: {
+    size: { w: 7, h: 5 },
+    draw(ctx, x, y) {
+      const w = 7 * TILE;
+      // open shed
+      ctx.fillStyle = '#6d5238';
+      ctx.fillRect(x + 4, y + 26, w - 8, 32);
+      ctx.fillStyle = '#54402c';
+      for (let i = 0; i < 6; i++) ctx.fillRect(x + 4, y + 28 + i * 6, w - 8, 1);
+      gable(ctx, x + 1, y + 14, w - 2, 13, '#7d8b96', '#5c6771');
+      // hull on the stocks
+      ctx.fillStyle = '#8a6b44';
+      ctx.fillRect(x + 16, y + 42, 44, 10);
+      ctx.fillStyle = '#a3814f';
+      ctx.fillRect(x + 20, y + 38, 36, 5);
+      ctx.fillStyle = '#54402c';
+      ctx.fillRect(x + 22, y + 52, 4, 6);
+      ctx.fillRect(x + 50, y + 52, 4, 6);
+      // crane
+      ctx.fillStyle = '#4a5a66';
+      ctx.fillRect(x + w - 10, y + 2, 3, 40);
+      ctx.fillRect(x + w - 26, y + 2, 19, 3);
+      ctx.fillStyle = '#d8b26a';
+      ctx.fillRect(x + w - 25, y + 5, 1, 12);
+      ctx.fillRect(x + w - 28, y + 17, 7, 5);
+    },
+  },
+  billboard: {
+    size: { w: 5, h: 4 },
+    draw(ctx, x, y) {
+      const w = 5 * TILE;
+      // the board
+      ctx.fillStyle = '#2a3946';
+      ctx.fillRect(x + 2, y + 6, w - 4, 30);
+      ctx.fillStyle = '#e0879f';
+      ctx.fillRect(x + 5, y + 9, w - 10, 24);
+      // a headline and some body lines
+      ctx.fillStyle = '#fff5f8';
+      ctx.fillRect(x + 9, y + 13, 30, 4);
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.fillRect(x + 9, y + 20, 40, 2);
+      ctx.fillRect(x + 9, y + 24, 34, 2);
+      ctx.fillRect(x + 9, y + 28, 22, 2);
+      // legs and lamps
+      ctx.fillStyle = '#4a5a66';
+      ctx.fillRect(x + 10, y + 36, 4, 16);
+      ctx.fillRect(x + w - 14, y + 36, 4, 16);
+      ctx.fillStyle = '#f5d98a';
+      ctx.fillRect(x + 14, y + 4, 4, 2);
+      ctx.fillRect(x + w - 18, y + 4, 4, 2);
+    },
+  },
+  warehouse: {
+    size: { w: 7, h: 4 },
+    draw(ctx, x, y) {
+      const w = 7 * TILE;
+      ctx.fillStyle = '#a3937a';
+      ctx.fillRect(x + 4, y + 16, w - 8, 36);
+      ctx.fillStyle = '#8a7b64';
+      ctx.fillRect(x + 4, y + 50, w - 8, 2);
+      // corrugated roof
+      for (let i = 0; i < 14; i++) {
+        ctx.fillStyle = i % 2 ? '#6f797e' : '#8d949a';
+        ctx.fillRect(x + 2 + i * 6, y + 8, 6, 9);
+      }
+      // roller doors
+      for (const dx of [10, 34, 58]) {
+        ctx.fillStyle = '#5c6771';
+        ctx.fillRect(x + dx, y + 26, 18, 26);
+        ctx.fillStyle = '#7d8b96';
+        for (let i = 0; i < 5; i++) ctx.fillRect(x + dx + 1, y + 28 + i * 5, 16, 2);
+      }
+      // pallets outside
+      ctx.fillStyle = '#b08a5a';
+      ctx.fillRect(x + w - 14, y + 44, 10, 8);
+      ctx.fillStyle = '#8a6b44';
+      ctx.fillRect(x + w - 14, y + 48, 10, 1);
     },
   },
   barn: {

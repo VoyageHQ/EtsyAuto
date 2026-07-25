@@ -28,6 +28,15 @@ export const api = {
   tick: () => request('/api/tick', { method: 'POST' }),
   loop: (on) => request('/api/loop', { method: 'POST', body: { on } }),
   recordSale: (body) => request('/api/sales', { method: 'POST', body }),
+
+  // The venture arm.
+  decideVenture: (id, decision, note = '') =>
+    request(`/api/ventures/${id}/decide`, { method: 'POST', body: { decision, note } }),
+  harvestSignals: (count = 5) => request('/api/ventures/harvest', { method: 'POST', body: { count } }),
+  setCampaignStatus: (id, status) =>
+    request(`/api/campaigns/${id}/status`, { method: 'POST', body: { status } }),
+  recordVentureRevenue: (id, amount, kind = 'one-off') =>
+    request(`/api/ventures/${id}/revenue`, { method: 'POST', body: { amount, kind } }),
   setListingUrl: (id, url) => request(`/api/listings/${id}/url`, { method: 'POST', body: { url } }),
 };
 

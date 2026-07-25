@@ -159,6 +159,86 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT
 );
 
+-- ---------------------------------------------------------------------------
+-- The venture arm. Deliberately its own tables: no venture agent reads the
+-- shop's data and no shop agent reads the ventures'.
+-- ---------------------------------------------------------------------------
+
+-- Raw complaints, wishes and frustrations harvested from public discussions.
+CREATE TABLE IF NOT EXISTS signals (
+  id           TEXT PRIMARY KEY,
+  source       TEXT NOT NULL,    -- hackernews | reddit | rss | manual
+  external_id  TEXT,             -- so the same post is never harvested twice
+  title        TEXT,
+  text         TEXT,
+  url          TEXT,
+  author       TEXT,
+  score        INTEGER,
+  comments     INTEGER,
+  phrase       TEXT,             -- the signal phrase that matched
+  channel      TEXT,             -- subreddit, feed name, story title
+  posted_at    INTEGER,
+  harvested_at INTEGER NOT NULL,
+  used         INTEGER NOT NULL DEFAULT 0
+);
+CREATE UNIQUE INDEX IF NOT EXISTS signals_external ON signals(source, external_id);
+
+CREATE TABLE IF NOT EXISTS ventures (
+  id            TEXT PRIMARY KEY,
+  slug          TEXT NOT NULL UNIQUE,
+  name          TEXT NOT NULL,
+  one_liner     TEXT,
+  problem       TEXT,
+  audience      TEXT,
+  solution      TEXT,
+  monetisation  TEXT,            -- json {model, price, tiers, firstPoundPath, daysToRevenue}
+  analysis      TEXT,            -- json from the Analyst
+  plan          TEXT,            -- json from the Architect
+  evidence      TEXT,            -- json array of signal ids and quotes
+  effort        INTEGER,
+  confidence    INTEGER,
+  score         REAL,
+  status        TEXT NOT NULL,   -- proposed | approved | rejected | shelved | killed | building | live | parked
+  stage         TEXT NOT NULL,   -- analysis | plan | build | marketing | live
+  dir           TEXT,
+  note          TEXT,
+  created_at    INTEGER NOT NULL,
+  decided_at    INTEGER,
+  updated_at    INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS venture_assets (
+  id         TEXT PRIMARY KEY,
+  venture_id TEXT NOT NULL REFERENCES ventures(id) ON DELETE CASCADE,
+  kind       TEXT NOT NULL,   -- code | page | doc | config | marketing
+  label      TEXT,
+  path       TEXT NOT NULL,
+  bytes      INTEGER,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS marketing (
+  id          TEXT PRIMARY KEY,
+  venture_id  TEXT NOT NULL REFERENCES ventures(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  channel     TEXT,            -- which channel the plan is for
+  status      TEXT NOT NULL,   -- draft | approved | running | paused | done
+  budget      REAL,            -- what YOU said it may spend, never what it spent
+  plan        TEXT,            -- json
+  created_at  INTEGER NOT NULL,
+  updated_at  INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS venture_revenue (
+  id          TEXT PRIMARY KEY,
+  venture_id  TEXT REFERENCES ventures(id) ON DELETE CASCADE,
+  amount      REAL NOT NULL,
+  currency    TEXT,
+  kind        TEXT,            -- subscription | one-off | ad | affiliate
+  note        TEXT,
+  occurred_at INTEGER NOT NULL
+);
+
 -- What the agents' brain has cost, so a runaway loop cannot quietly spend
 -- money. Rows are per model call.
 CREATE TABLE IF NOT EXISTS spend (

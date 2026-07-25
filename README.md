@@ -1,8 +1,11 @@
 # Hartistic Valley
 
-An agent fleet that invents, designs and lists digital products for an Etsy
-shop, run from a pixel-art dashboard where every building is a real queue and
-every villager is a real agent.
+Two businesses run by fourteen agents on one pixel-art dashboard, where every
+building is a real queue and every villager is a real agent.
+
+- **The Valley** — an Etsy shop: digital products invented, designed and listed.
+- **The Harbour** — a venture arm: startup ideas found in real discussions,
+  checked for money, built as an MVP and marketed.
 
 You approve the ideas. They do the rest.
 
@@ -75,6 +78,32 @@ npm run status               # who is doing what
 npm run make                 # work through the queue now
 ```
 
+## The Harbour — the venture arm
+
+Click the name in the top left to switch business. Six more agents, none of
+whom touch the shop:
+
+1. **The Prospector** reads Hacker News, Reddit and any forum feed you give it,
+   looking for the phrases people use when they have an unmet need — "I wish
+   there was", "is there a tool that", "we still use a spreadsheet". It brings
+   you **the single best one**, with the actual quotes and links as evidence.
+2. **The Analyst** decides whether it can make money, and kills it if it
+   cannot. No path to a payment within 90 days, or needs a licence? Dead.
+3. **The Architect** cuts it down to a fortnight of evenings and writes down
+   what is deliberately *not* being built.
+4. **The Builder** scaffolds a genuinely running MVP: landing page with the
+   buyers' own words on it, working waitlist, pricing page ready for Stripe.
+5. **The Marketer** writes the positioning, launch plan, ad copy and calendar —
+   and has no payment method or posting credentials, by design.
+6. **The Harbourmaster** keeps it moving, one venture at a time.
+
+```bash
+cd ventures/<name> && node server.js     # the MVP, running, no install
+```
+
+Full detail — including exactly what the Builder does and does not produce —
+in [docs/VENTURES.md](docs/VENTURES.md).
+
 ## The dashboard
 
 | Building | What it is |
@@ -89,6 +118,11 @@ npm run make                 # work through the queue now
 | **Lookout** | What the Researcher thinks buyers want right now. |
 | **Calendar** | The season the shop is currently pushing for. |
 | **Ledger** | Earnings, what sells, what does not, and what you keep approving. |
+
+And in the Harbour: **Lighthouse** (the shortlist and the evidence),
+**Counting House** (can it make money), **Drawing Office** (the scope),
+**Boatyard** (the built MVP), **Billboard** (campaigns), **Warehouse** (what is
+live and what it earned), **Harbour Office** (the foreman).
 
 The clock in the corner is real: the valley gets dark in the evening and the
 windows come on.
@@ -171,6 +205,7 @@ src/agents      one file per villager, plus the Scout's idea corpus
 src/pipeline    the job queue and the product lifecycle
 src/design      vector doc → PDF/SVG/PNG, page templates, mockups
 src/etsy        SEO rules, listing builder, upload packs, optional API
+src/ventures    research sources, idea synthesis, MVP scaffolding, marketing
 src/discord     gateway client, per-agent bots, avatars, slash commands
 src/server      the dashboard API and static host
 src/web         the dashboard itself: canvas valley, sidebar, panels

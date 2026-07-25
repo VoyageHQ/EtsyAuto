@@ -1,0 +1,269 @@
+// Where startup ideas actually come from: people complaining in public.
+//
+// Rules this file sticks to, because getting them wrong gets accounts banned:
+//   - Only documented public JSON and RSS endpoints meant to be consumed.
+//     No HTML scraping, no logged-in pages, no pretending to be a browser.
+//   - A real User-Agent that says who we are, as Reddit and HN both ask.
+//   - One request at a time, with a gap between them, and a hard cap per run.
+//   - Anything a source refuses is logged and skipped. Never retried in a loop.
+//
+// Every source is optional and independent. If Reddit is unreachable the
+// Prospector still works from Hacker News, and if the whole network is down it
+// still works from the built-in corpus.
+import config from '../core/config.js';
+import { log } from '../core/events.js';
+
+const UA = `EtsyAuto-Ventures/0.1 (startup idea research; +https://github.com/VoyageHQ/EtsyAuto)`;
+const GAP_MS = 1200;
+let lastCall = 0;
+
+/**
+ * The phrases that mark a real problem rather than an opinion. These are the
+ * whole trick: people describe their own unmet needs in a handful of very
+ * predictable ways.
+ */
+export const SIGNAL_PHRASES = [
+  'i wish there was',
+  'is there a tool that',
+  'is there an app that',
+  'why is there no',
+  'does anyone know a tool',
+  'looking for a tool',
+  'any alternative to',
+  'i hate that i have to',
+  'takes me hours',
+  'wasting hours',
+  'so much manual work',
+  'we still use a spreadsheet',
+  'still doing this manually',
+  'there has to be a better way',
+  'biggest pain point',
+  'most frustrating part of',
+  'what do you use for',
+  'how do you all handle',
+];
+
+/** Communities worth listening to, if Reddit is reachable. */
+export const DEFAULT_SUBREDDITS = [
+  'smallbusiness',
+  'Entrepreneur',
+  'SaaS',
+  'freelance',
+  'sysadmin',
+  'accounting',
+  'restaurateur',
+  'RealEstate',
+  'nonprofit',
+  'Teachers',
+];
+
+async function throttled(url, options = {}) {
+  const wait = Math.max(0, GAP_MS - (Date.now() - lastCall));
+  if (wait) await new Promise((r) => setTimeout(r, wait));
+  lastCall = Date.now();
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const res = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      headers: { 'user-agent': UA, accept: 'application/json, text/xml;q=0.9', ...options.headers },
+    });
+    if (!res.ok) {
+      const err = new Error(`${res.status} ${res.statusText}`);
+      err.status = res.status;
+      throw err;
+    }
+    return res;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const stripHtml = (text) =>
+  String(text || '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&#x27;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#x2F;/g, '/')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+// --- Hacker News -----------------------------------------------------------
+// The Algolia search API is public, documented and free, with no key. It is
+// the most reliable source here and it indexes every comment.
+
+async function fetchHackerNews({ phrases, perPhrase = 8 }) {
+  const out = [];
+  for (const phrase of phrases) {
+    const url =
+      'https://hn.algolia.com/api/v1/search_by_date?' +
+      new URLSearchParams({
+        query: `"${phrase}"`,
+        tags: 'comment',
+        hitsPerPage: String(perPhrase),
+      });
+    const res = await throttled(url);
+    const data = await res.json();
+    for (const hit of data.hits || []) {
+      const text = stripHtml(hit.comment_text);
+      if (text.length < 60) continue;
+      out.push({
+        source: 'hackernews',
+        externalId: String(hit.objectID),
+        title: hit.story_title || 'Hacker News comment',
+        text: text.slice(0, 1200),
+        url: `https://news.ycombinator.com/item?id=${hit.objectID}`,
+        author: hit.author || null,
+        score: null,
+        comments: null,
+        phrase,
+        channel: hit.story_title || 'Hacker News',
+        postedAt: hit.created_at_i ? hit.created_at_i * 1000 : Date.now(),
+      });
+    }
+  }
+  return out;
+}
+
+// --- Reddit ----------------------------------------------------------------
+// Reddit's public .json endpoints work without a key for modest, identified
+// use. If you plan to run this hard, register a script app and put a token in
+// REDDIT_TOKEN — see docs/VENTURES.md.
+
+async function fetchReddit({ phrases, subreddits, perSub = 25 }) {
+  const out = [];
+  const headers = config.ventures.redditToken
+    ? { authorization: `Bearer ${config.ventures.redditToken}` }
+    : {};
+  const base = config.ventures.redditToken ? 'https://oauth.reddit.com' : 'https://www.reddit.com';
+
+  for (const sub of subreddits) {
+    const url = `${base}/r/${encodeURIComponent(sub)}/top.json?t=week&limit=${perSub}`;
+    const res = await throttled(url, { headers });
+    const data = await res.json();
+    for (const child of data?.data?.children || []) {
+      const post = child.data || {};
+      const haystack = `${post.title || ''} ${post.selftext || ''}`.toLowerCase();
+      const phrase = phrases.find((p) => haystack.includes(p));
+      if (!phrase) continue;
+      out.push({
+        source: 'reddit',
+        externalId: String(post.id),
+        title: post.title || '',
+        text: stripHtml(post.selftext).slice(0, 1200),
+        url: post.permalink ? `https://www.reddit.com${post.permalink}` : post.url,
+        author: post.author || null,
+        score: Number(post.score) || 0,
+        comments: Number(post.num_comments) || 0,
+        phrase,
+        channel: `r/${post.subreddit || sub}`,
+        postedAt: post.created_utc ? post.created_utc * 1000 : Date.now(),
+      });
+    }
+  }
+  return out;
+}
+
+// --- Any RSS feed ----------------------------------------------------------
+// Forums, blogs, changelogs — anything that publishes a feed. Set
+// VENTURE_FEEDS to a comma separated list of URLs.
+
+async function fetchRss({ phrases, feeds }) {
+  const out = [];
+  for (const feed of feeds) {
+    const res = await throttled(feed, { headers: { accept: 'application/rss+xml, text/xml' } });
+    const xml = await res.text();
+    const items = xml.split(/<(?:item|entry)[\s>]/i).slice(1);
+    for (const item of items.slice(0, 25)) {
+      const title = stripHtml(pick(item, 'title'));
+      const body = stripHtml(pick(item, 'content:encoded') || pick(item, 'description') || pick(item, 'summary'));
+      const link = (item.match(/<link[^>]*href="([^"]+)"/i) || [])[1] || stripHtml(pick(item, 'link'));
+      const haystack = `${title} ${body}`.toLowerCase();
+      const phrase = phrases.find((p) => haystack.includes(p));
+      if (!phrase) continue;
+      out.push({
+        source: 'rss',
+        externalId: link || title,
+        title,
+        text: body.slice(0, 1200),
+        url: link,
+        author: stripHtml(pick(item, 'dc:creator')) || null,
+        score: null,
+        comments: null,
+        phrase,
+        channel: new URL(feed).hostname,
+        postedAt: Date.parse(stripHtml(pick(item, 'pubDate') || pick(item, 'updated'))) || Date.now(),
+      });
+    }
+  }
+  return out;
+}
+
+const pick = (xml, tag) => {
+  const match = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, 'i'));
+  return match ? match[1] : '';
+};
+
+// --- the roster ------------------------------------------------------------
+
+export const SOURCES = [
+  {
+    id: 'hackernews',
+    name: 'Hacker News',
+    note: 'Public Algolia search API. No key, no account, explicitly free.',
+    enabled: () => config.ventures.sources.includes('hackernews'),
+    run: fetchHackerNews,
+  },
+  {
+    id: 'reddit',
+    name: 'Reddit',
+    note: 'Public .json endpoints. Register a script app for heavy use.',
+    enabled: () => config.ventures.sources.includes('reddit'),
+    run: (opts) => fetchReddit({ ...opts, subreddits: config.ventures.subreddits }),
+  },
+  {
+    id: 'rss',
+    name: 'Forums & feeds',
+    note: 'Any RSS or Atom feed you list in VENTURE_FEEDS.',
+    enabled: () => config.ventures.sources.includes('rss') && config.ventures.feeds.length > 0,
+    run: (opts) => fetchRss({ ...opts, feeds: config.ventures.feeds }),
+  },
+];
+
+/**
+ * Harvest from every enabled source. Never throws: a source that is down,
+ * blocked or rate limited is reported and skipped.
+ * @returns {Promise<{signals: object[], report: object[]}>}
+ */
+export async function harvest({ phrases = SIGNAL_PHRASES, perPhrase = 6 } = {}) {
+  const signals = [];
+  const report = [];
+
+  for (const source of SOURCES) {
+    if (!source.enabled()) {
+      report.push({ source: source.id, status: 'off' });
+      continue;
+    }
+    try {
+      const found = await source.run({ phrases, perPhrase });
+      signals.push(...found);
+      report.push({ source: source.id, status: 'ok', found: found.length });
+    } catch (err) {
+      const why =
+        err.status === 403 || err.status === 429
+          ? `${source.name} is rate limiting or blocking us (${err.status}). Backing off.`
+          : `${source.name} unreachable: ${err.message}`;
+      report.push({ source: source.id, status: 'failed', why });
+      log({ agent: 'prospector', kind: 'source', level: 'warn', message: why, discord: false });
+    }
+  }
+
+  return { signals, report };
+}
+
+export default harvest;

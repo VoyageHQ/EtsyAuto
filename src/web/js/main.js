@@ -23,6 +23,7 @@ const dom = {
   modalClose: el('modal-close'),
   toast: el('toast'),
   hint: el('maphint'),
+  brandSwitch: el('district-switch'),
 };
 
 const esc = (value) =>
@@ -35,6 +36,37 @@ const esc = (value) =>
 let state = null;
 let openStation = null;
 let refreshTimer = null;
+
+// Which business you are looking at. The other one carries on regardless.
+let district = localStorage.getItem('district') || 'valley';
+const DIVISION_OF = { valley: 'etsy', harbour: 'ventures' };
+
+function stationsOf(worldId) {
+  return state?.worlds?.[worldId]?.stations || [];
+}
+
+function worldOfStation(stationId) {
+  for (const [id, world] of Object.entries(state?.worlds || {})) {
+    if (world.stations.some((s) => s.id === stationId)) return id;
+  }
+  return 'valley';
+}
+
+function setDistrict(next, { redraw = true } = {}) {
+  if (!state?.worlds?.[next] || district === next) return;
+  district = next;
+  localStorage.setItem('district', next);
+  if (redraw) valley.setWorld(state.worlds[district]);
+  valley.setState(visibleState());
+  renderTop();
+  renderAgents();
+}
+
+/** The map and the agent list only ever show one division at a time. */
+function visibleState() {
+  const division = DIVISION_OF[district];
+  return { ...state, agents: state.agents.filter((a) => a.division === division) };
+}
 
 const valley = new Valley(el('map'), el('overlay'));
 valley.onStation = (id) => openPanel(id);
@@ -54,8 +86,8 @@ async function refresh(force = false) {
     const next = await api.state();
     const first = !state;
     state = next;
-    if (first) valley.setWorld(state.world);
-    valley.setState(state);
+    if (first) valley.setWorld(state.worlds[district] || state.world);
+    valley.setState(visibleState());
     renderTop();
     renderAttention();
     renderAgents();
@@ -67,8 +99,9 @@ async function refresh(force = false) {
 }
 
 function renderTop() {
-  document.title = `${state.shop.valley}`;
-  dom.brand.textContent = state.shop.valley;
+  const division = state.divisions.find((d) => d.world === district) || state.divisions[0];
+  document.title = division.name;
+  dom.brand.textContent = division.name;
   dom.clockTime.textContent = state.shop.clock.label;
   dom.clockPhase.textContent = state.shop.clock.phase;
 
@@ -76,7 +109,7 @@ function renderTop() {
     state.agents.filter((a) => a.status === 'working').map((a) => a.station)
   );
 
-  dom.tabs.innerHTML = state.world.stations
+  dom.tabs.innerHTML = stationsOf(district)
     .map((station) => {
       const value = state.counts[station.counter];
       const sub = subLabel(station, value);
@@ -91,6 +124,16 @@ function renderTop() {
 }
 
 const SUFFIX = {
+  // harbour
+  signals: ['scanning', 'signals'],
+  venturesActive: ['quiet', 'in hand'],
+  venturesUnderReview: ['ledgers closed', 'on the books'],
+  venturesPlanning: ['drawings filed', 'on the board'],
+  venturesBuilding: ['yard empty', 'in the slipway'],
+  venturesLive: ['shutters down', 'live'],
+  campaignsLive: ['no campaigns', 'campaigns'],
+  bundles: ['crates empty', 'packing'],
+  // valley
   jobsQueued: ['link up', 'in flight'],
   ideasProposed: ['nothing new', 'rankable'],
   ideasShelved: ['empty shelves', 'shelved'],
@@ -166,9 +209,11 @@ function agentName(id) {
 }
 
 function renderAgents() {
+  const division = DIVISION_OF[district];
   dom.agents.innerHTML = state.agents
+    .filter((agent) => agent.division === division)
     .map((agent) => {
-      const station = state.world.stations.find((s) => s.id === agent.station);
+      const station = stationsOf(district).find((s) => s.id === agent.station);
       return `
       <div class="agent ${agent.status}" data-agent="${esc(agent.id)}" data-station="${esc(agent.station)}">
         <span class="agent-name"><span class="swatch" style="background:${esc(agent.colour)}"></span>${esc(
@@ -198,8 +243,12 @@ function eventRow(event) {
 // --- station panels --------------------------------------------------------
 
 function openPanel(stationId) {
+  // A decision from the other business switches you over to it first.
+  const world = worldOfStation(stationId);
+  if (world !== district) setDistrict(world);
+
   openStation = stationId;
-  const station = state.world.stations.find((s) => s.id === stationId);
+  const station = stationsOf(district).find((s) => s.id === stationId);
   dom.modalTitle.textContent = station?.name || stationId;
   dom.modalBlurb.textContent = station?.blurb || '';
   dom.modal.hidden = false;
@@ -224,6 +273,13 @@ dom.modal.addEventListener('click', (e) => {
 });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !dom.modal.hidden) closePanel();
+});
+
+dom.brandSwitch?.addEventListener('click', () => {
+  const worlds = state?.divisions?.map((d) => d.world) || ['valley'];
+  const next = worlds[(worlds.indexOf(district) + 1) % worlds.length];
+  setDistrict(next);
+  toast(state.divisions.find((d) => d.world === next)?.name || next);
 });
 
 dom.tabs.addEventListener('click', (e) => {

@@ -47,7 +47,341 @@ const PANELS = {
   ledger: ledgerPanel,
   lookout: lookoutPanel,
   packhouse: packhousePanel,
+  // The harbour.
+  lighthouse: lighthousePanel,
+  'harbour-office': harbourOfficePanel,
+  'counting-house': countingHousePanel,
+  'drawing-office': drawingOfficePanel,
+  boatyard: boatyardPanel,
+  billboard: billboardPanel,
+  warehouse: warehousePanel,
 };
+
+// --- the harbour -----------------------------------------------------------
+
+const ventureCard = (v, state, extra = '') => `
+  <div class="tile" style="margin-bottom:10px">
+    <div style="display:flex;align-items:baseline;gap:8px;justify-content:space-between">
+      <h4>${esc(v.name)}</h4>
+      <span class="stage-chip ${esc(v.status === 'killed' ? 'blocked' : v.stage)}">${esc(v.stage)} · ${esc(v.status)}</span>
+    </div>
+    <p>${esc(v.oneLiner)}</p>
+    <p><b>Who pays</b> ${esc(v.audience)} ·
+      <b>Money</b> ${esc(v.monetisation?.model || '?')} at ${money(v.monetisation?.price, state.shop.currency)} ·
+      <b>First payment</b> ~${esc(v.monetisation?.daysToRevenue ?? '?')} days</p>
+    ${extra}
+    ${
+      v.dir
+        ? `<div class="actions"><a class="tiny" style="text-decoration:none;padding:4px 7px;border:1px solid var(--line)"
+             href="/${esc(v.dir)}/README.md" target="_blank">readme</a>
+           <a class="tiny" style="text-decoration:none;padding:4px 7px;border:1px solid var(--line)"
+             href="/${esc(v.dir)}/PLAN.md" target="_blank">plan</a>
+           <a class="tiny" style="text-decoration:none;padding:4px 7px;border:1px solid var(--line)"
+             href="/${esc(v.dir)}/public/index.html" target="_blank">landing page</a></div>`
+        : ''
+    }
+  </div>`;
+
+function evidenceList(v) {
+  if (!v.evidence?.length) return '<p class="quiet">No evidence recorded, which is a reason to be careful.</p>';
+  return v.evidence
+    .map(
+      (e) => `<figure style="margin:0 0 8px;padding:8px 10px;background:var(--panel);border:1px solid var(--line)">
+        <blockquote style="margin:0 0 4px;font-size:10.5px;color:var(--text);line-height:1.5">"${esc(e.quote)}"</blockquote>
+        <figcaption style="font-size:8.5px;color:var(--dimmer)">${esc(e.channel || e.source)}
+          ${e.url ? `· <a href="${esc(e.url)}" target="_blank" rel="noopener">source</a>` : ''}
+          ${e.phrase ? `· matched "${esc(e.phrase)}"` : ''}</figcaption>
+      </figure>`
+    )
+    .join('');
+}
+
+function lighthousePanel(state, ctx) {
+  const proposed = (state.ventures || []).filter((v) => v.status === 'proposed');
+  const best = proposed[0];
+  const sources = state.sources || [];
+
+  return {
+    html: `
+      <div class="bar">
+        <span class="quiet" style="flex:1">Listening to ${sources
+          .filter((s) => s.enabled)
+          .map((s) => esc(s.name))
+          .join(', ') || 'nothing — set VENTURE_SOURCES in .env'}. ${state.counts.signals || 0} signals on file.</span>
+        <button class="tiny" data-act="harvest">go and listen now</button>
+      </div>
+
+      ${
+        best
+          ? `<div class="card hot" style="margin-bottom:14px">
+              <div class="card-head"><span class="dot"></span><span class="card-who">my pick</span></div>
+              <h4 style="margin:0 0 4px;font-size:13px">${esc(best.name)}</h4>
+              <p class="card-body">${esc(best.oneLiner)}</p>
+              <p class="card-body"><b>Who pays</b> ${esc(best.audience)}<br />
+                <b>How it makes money</b> ${esc(best.monetisation?.model)} at
+                ${money(best.monetisation?.price, state.shop.currency)} —
+                ${esc(best.monetisation?.firstPoundPath || '')}<br />
+                <b>First payment in</b> about ${esc(best.monetisation?.daysToRevenue)} days ·
+                <b>Effort</b> ${best.effort}/5 · <b>Score</b> ${best.score}</p>
+              <div class="actions">
+                <button class="primary" data-decide="${esc(best.id)}" data-value="approved" style="width:auto">build this one</button>
+                <button class="tiny danger" data-decide="${esc(best.id)}" data-value="rejected">not this</button>
+                <button class="tiny" data-decide="${esc(best.id)}" data-value="shelved">later</button>
+              </div>
+            </div>
+            <h4 style="margin:0 0 8px;font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--amber)">the evidence</h4>
+            ${evidenceList(best)}
+            <textarea id="ven-note" placeholder="optional: why not? this teaches the Prospector"></textarea>`
+          : '<p class="quiet">Nothing proposed yet. Press "go and listen now" and the Prospector will go and read.</p>'
+      }
+
+      ${
+        proposed.length > 1
+          ? `<h4 style="margin:18px 0 8px;font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--amber)">the rest of the shortlist</h4>
+             ${proposed
+               .slice(1)
+               .map((v) =>
+                 ventureCard(
+                   v,
+                   state,
+                   `<div class="actions">
+                      <button class="tiny" data-decide="${esc(v.id)}" data-value="approved">build this instead</button>
+                      <button class="tiny danger" data-decide="${esc(v.id)}" data-value="rejected">no</button>
+                    </div>`
+                 )
+               )
+               .join('')}`
+          : ''
+      }
+
+      <h4 style="margin:18px 0 8px;font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--amber)">latest signals heard</h4>
+      ${
+        (state.signals || []).length
+          ? state.signals
+              .slice(0, 10)
+              .map(
+                (s) => `<div class="lesson"><div><b>${esc(s.channel || s.source)}</b><br />
+                  ${esc((s.text || s.title || '').slice(0, 160))}</div>
+                  ${s.url ? `<a class="tiny" style="text-decoration:none" href="${esc(s.url)}" target="_blank">open</a>` : ''}</div>`
+              )
+              .join('')
+          : '<p class="quiet">Nothing harvested yet.</p>'
+      }`,
+    mount(root) {
+      root.addEventListener('click', async (e) => {
+        if (e.target.dataset?.act === 'harvest') {
+          await api.harvestSignals();
+          ctx.toast('the Prospector is listening');
+          return;
+        }
+        const id = e.target.dataset?.decide;
+        if (!id) return;
+        const note = root.querySelector('#ven-note')?.value.trim() || '';
+        await api.decideVenture(id, e.target.dataset.value, note);
+        ctx.toast(e.target.dataset.value);
+        ctx.refresh(true);
+      });
+    },
+  };
+}
+
+function harbourOfficePanel(state, ctx) {
+  const ventures = state.ventures || [];
+  const live = ventures.filter((v) => v.stage === 'live');
+  return {
+    html: `
+      <div class="grid2" style="margin-bottom:14px">
+        <div class="tile">
+          <h4>Ventures</h4>
+          <p>${ventures.length} on the books · ${state.counts.venturesActive || 0} in hand ·
+            ${live.length} live</p>
+          <p>One venture is built at a time. Two half-built products are worth
+          less than one finished one.</p>
+        </div>
+        <div class="tile">
+          <h4>Research sources</h4>
+          ${(state.sources || [])
+            .map(
+              (s) =>
+                `<p><b style="color:${s.enabled ? 'var(--green)' : 'var(--dimmer)'}">${
+                  s.enabled ? 'on' : 'off'
+                }</b> ${esc(s.name)} — ${esc(s.note)}</p>`
+            )
+            .join('')}
+        </div>
+      </div>
+      ${ventures.length ? ventures.map((v) => ventureCard(v, state)).join('') : '<p class="quiet">Nothing yet.</p>'}`,
+  };
+}
+
+function countingHousePanel(state) {
+  const ventures = (state.ventures || []).filter((v) => v.analysis || v.stage === 'analysis');
+  return {
+    html: ventures.length
+      ? ventures
+          .map((v) => {
+            const a = v.analysis;
+            return ventureCard(
+              v,
+              state,
+              a
+                ? `<p><b>Verdict</b> ${esc(a.verdict)} — ${esc(a.why)}</p>
+                   <p><b>Who would pay</b> ${esc(a.wouldPay || '')}</p>
+                   <p><b>Already doing this</b> ${(a.competitors || []).map(esc).join('; ')}</p>
+                   ${a.risks?.length ? `<p><b>Risks</b> ${a.risks.map(esc).join('; ')}</p>` : ''}
+                   ${a.legal?.length ? `<p style="color:var(--rose)"><b>Legal</b> ${a.legal.map(esc).join('; ')}</p>` : ''}`
+                : '<p class="quiet">Not analysed yet.</p>'
+            );
+          })
+          .join('')
+      : '<p class="quiet">Nothing on the books.</p>',
+  };
+}
+
+function drawingOfficePanel(state) {
+  const ventures = (state.ventures || []).filter((v) => v.plan);
+  return {
+    html: ventures.length
+      ? ventures
+          .map((v) => {
+            const p = v.plan;
+            return ventureCard(
+              v,
+              state,
+              `<p><b>Goal</b> ${esc(p.mvpGoal)}</p>
+               <p><b>Building</b></p><ul class="tagline" style="display:block;padding-left:16px">${(p.mustHave || [])
+                 .map((f) => `<li style="font-size:10.5px;color:var(--dim);margin-bottom:3px">${esc(f)}</li>`)
+                 .join('')}</ul>
+               <p><b>Deliberately not building</b> ${(p.notBuilding || []).map(esc).join('; ')}</p>
+               <p><b>Done means</b> ${esc(p.successMetric)}</p>
+               <p><b>First customer</b> ${esc(p.firstCustomerPlan)}</p>`
+            );
+          })
+          .join('')
+      : '<p class="quiet">Nothing on the drawing board.</p>',
+  };
+}
+
+function boatyardPanel(state, ctx) {
+  const ventures = (state.ventures || []).filter((v) => v.dir);
+  return {
+    html: `
+      <p class="quiet" style="margin-bottom:14px">What the Builder produces is a real running start:
+      a landing page with the buyers' own words on it, working signup capture, and a pricing page
+      ready for Stripe payment links. The feature that makes it worth paying for is still yours to
+      write — the plan says which one.</p>
+      ${
+        ventures.length
+          ? ventures
+              .map((v) =>
+                ventureCard(
+                  v,
+                  state,
+                  `<p><b>Files</b> ${v.assets.length} in <code>${esc(v.dir)}/</code></p>
+                   <p class="quiet">Run it: <code>cd ${esc(v.dir)} && node server.js</code></p>`
+                )
+              )
+              .join('')
+          : '<p class="quiet">Nothing in the slipway.</p>'
+      }`,
+  };
+}
+
+function billboardPanel(state, ctx) {
+  const campaigns = state.campaigns || [];
+  return {
+    html: `
+      <p class="quiet" style="margin-bottom:14px">The Marketer writes and plans. You press go. It has
+      no payment method and no posting credentials, by design — a campaign sits as a draft until you
+      approve it, and even then it hands you a checklist rather than posting anything itself.</p>
+      ${
+        campaigns.length
+          ? campaigns
+              .map((c) => {
+                const venture = (state.ventures || []).find((v) => v.id === c.venture_id);
+                const plan = c.plan || {};
+                return `<div class="tile" style="margin-bottom:10px">
+                <div style="display:flex;align-items:baseline;gap:8px;justify-content:space-between">
+                  <h4>${esc(c.name)}</h4>
+                  <span class="stage-chip ${c.status === 'running' ? 'ready' : ''}">${esc(c.status)}</span>
+                </div>
+                <p><b>Tagline</b> ${esc(plan.tagline || '')}</p>
+                <p><b>Channels</b> ${(plan.channels || []).map((ch) => esc(ch.name)).join(', ')}</p>
+                <p><b>First move</b> ${esc((plan.sequence || [])[0] || '')}</p>
+                <p><b>Budget</b> ${c.budget ? money(c.budget, state.shop.currency) : 'nothing — free channels only'}</p>
+                ${
+                  venture?.dir
+                    ? `<div class="actions">
+                        <a class="tiny" style="text-decoration:none;padding:4px 7px;border:1px solid var(--line)"
+                          href="/${esc(venture.dir)}/marketing/LAUNCH-PLAN.md" target="_blank">launch plan</a>
+                        <a class="tiny" style="text-decoration:none;padding:4px 7px;border:1px solid var(--line)"
+                          href="/${esc(venture.dir)}/marketing/AD-COPY.md" target="_blank">ad copy</a>
+                        <a class="tiny" style="text-decoration:none;padding:4px 7px;border:1px solid var(--line)"
+                          href="/${esc(venture.dir)}/marketing/CONTENT-CALENDAR.csv" target="_blank">calendar</a>
+                        <button class="tiny" data-campaign="${esc(c.id)}" data-status="${
+                          c.status === 'running' ? 'paused' : 'running'
+                        }">${c.status === 'running' ? 'pause it' : 'mark it running'}</button>
+                      </div>`
+                    : ''
+                }
+              </div>`;
+              })
+              .join('')
+          : '<p class="quiet">No campaigns yet. They appear once a venture reaches the marketing stage.</p>'
+      }`,
+    mount(root) {
+      root.addEventListener('click', async (e) => {
+        const id = e.target.dataset?.campaign;
+        if (!id) return;
+        await api.setCampaignStatus(id, e.target.dataset.status);
+        ctx.toast('updated');
+        ctx.refresh(true);
+      });
+    },
+  };
+}
+
+function warehousePanel(state, ctx) {
+  const live = (state.ventures || []).filter((v) => v.stage === 'live' || v.revenue > 0);
+  const total = live.reduce((sum, v) => sum + Number(v.revenue || 0), 0);
+  return {
+    html: `
+      <div class="tile" style="margin-bottom:12px">
+        <h4>${money(total, state.shop.currency)}</h4>
+        <p>${live.length} venture(s) live. Record what each one earns and the Prospector stops
+        guessing about what works.</p>
+      </div>
+      ${
+        live.length
+          ? live
+              .map((v) =>
+                ventureCard(
+                  v,
+                  state,
+                  `<p><b>Earned</b> ${money(v.revenue, state.shop.currency)}</p>
+                   <div class="bar" style="border:0;padding:6px 0">
+                     <input type="number" step="0.01" placeholder="amount" data-amount="${esc(v.id)}" style="width:100px" />
+                     <button class="tiny" data-revenue="${esc(v.id)}">record</button>
+                   </div>`
+                )
+              )
+              .join('')
+          : '<p class="quiet">Nothing live yet.</p>'
+      }`,
+    mount(root) {
+      root.addEventListener('click', async (e) => {
+        const id = e.target.dataset?.revenue;
+        if (!id) return;
+        const input = root.querySelector(`[data-amount="${id}"]`);
+        const amount = Number(input?.value);
+        if (!(amount > 0)) return ctx.toast('what amount?');
+        await api.recordVentureRevenue(id, amount);
+        ctx.toast('recorded');
+        ctx.refresh(true);
+      });
+    },
+  };
+}
 
 // --- research bench: the idea list ----------------------------------------
 

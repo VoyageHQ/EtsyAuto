@@ -8,8 +8,15 @@ import Copywriter from './copywriter.js';
 import QA from './qa.js';
 import Lister from './lister.js';
 import Curator from './curator.js';
+import Harbourmaster from './harbourmaster.js';
+import Prospector from './prospector.js';
+import Analyst from './analyst.js';
+import Architect from './architect.js';
+import Builder from './builder.js';
+import Marketer from './marketer.js';
 
 const instances = [
+  // The Etsy shop.
   new Manager(),
   new Scout(),
   new Researcher(),
@@ -18,6 +25,13 @@ const instances = [
   new QA(),
   new Lister(),
   new Curator(),
+  // The venture arm. Separate people, separate data, same dashboard.
+  new Harbourmaster(),
+  new Prospector(),
+  new Analyst(),
+  new Architect(),
+  new Builder(),
+  new Marketer(),
 ];
 
 export const agents = new Map(instances.map((a) => [a.id, a]));
@@ -35,5 +49,8 @@ export function agentForKind(kind) {
 }
 
 export const roster = () => agentList().map((a) => a.toJSON());
+
+/** Just one side of the business. */
+export const agentsIn = (division) => agentList().filter((a) => a.division === division);
 
 export default agents;

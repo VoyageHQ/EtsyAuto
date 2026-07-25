@@ -8,6 +8,23 @@ import { log, pushState } from '../core/events.js';
 import { setAgentState, one } from '../core/db.js';
 import { stationById } from '../core/stations.js';
 
+const VENTURE_CONTEXT = `
+About the business you work for:
+- It is a one-person venture arm. The owner has a day job and evenings, no
+  staff, no investors and no budget beyond a few pounds a month for hosting.
+- The point is a small business that takes real money from real people, not a
+  startup that raises money. Anything needing a funding round is out of scope.
+- Ideas come from evidence: people describing an unmet need in public, in their
+  own words, recently. Not from brainstorming.
+- Anything built must be buildable in about two weeks of evenings and hostable
+  free or nearly free.
+- Out of scope entirely: two-sided marketplaces, anything needing a licence
+  (financial advice, medical, legal), anything holding other people's money,
+  and anything that only works at scale.
+- Nothing is ever published, posted, launched or paid for without the owner
+  approving it first. No agent has a payment method or posting credentials.
+`.trim();
+
 const SHOP_CONTEXT = `
 About the shop you work for:
 - It sells DIGITAL DOWNLOADS only on Etsy. Nothing is ever printed, packed or
@@ -42,6 +59,9 @@ export class Agent {
       voice: 'Plain, warm, no corporate filler. Short sentences.',
       colour: '#9fd0a0',
       handles: [],
+      // Which business this agent works for. The shop is the default because
+      // it came first; venture agents say so explicitly.
+      division: 'etsy',
       ...spec,
     });
     this.home = spec.station;
@@ -95,15 +115,18 @@ export class Agent {
   async think({ prompt, task = '', json = false, maxTokens = 2000, temperature = 1 }) {
     // Order matters: the shop's own results, then the owner's rules last, so
     // the rules win any argument.
+    const ventures = this.division === 'ventures';
     const system = [
-      `You are ${this.name}, ${this.title} at ${config.shopName}, a one-person Etsy shop selling digital downloads.`,
+      ventures
+        ? `You are ${this.name}, ${this.title} in the venture arm of a one-person business.`
+        : `You are ${this.name}, ${this.title} at ${config.shopName}, a one-person Etsy shop selling digital downloads.`,
       '',
       this.purpose.trim(),
       '',
-      SHOP_CONTEXT,
+      ventures ? VENTURE_CONTEXT : SHOP_CONTEXT,
       '',
       `How you write: ${this.voice}`,
-      this.usesInsights === false ? '' : insightBlock(this.id),
+      this.usesInsights === false ? '' : insightBlock(this.id, this.division),
       lessonBlock(this.id),
     ]
       .filter(Boolean)
@@ -157,6 +180,7 @@ export class Agent {
       id: this.id,
       name: this.name,
       title: this.title,
+      division: this.division,
       model: this.model,
       colour: this.colour,
       home: this.home,
