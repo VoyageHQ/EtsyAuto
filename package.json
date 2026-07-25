@@ -1,0 +1,29 @@
+{
+  "name": "etsyauto",
+  "version": "0.1.0",
+  "private": true,
+  "description": "An AI agent fleet that invents, designs and lists digital products for an Etsy shop, run from a pixel-valley dashboard.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/index.js",
+    "dashboard": "node --disable-warning=ExperimentalWarning src/index.js --no-loop",
+    "ideas": "node --disable-warning=ExperimentalWarning src/cli.js ideas",
+    "queue": "node --disable-warning=ExperimentalWarning src/cli.js queue",
+    "approve": "node --disable-warning=ExperimentalWarning src/cli.js approve",
+    "reject": "node --disable-warning=ExperimentalWarning src/cli.js reject",
+    "answer": "node --disable-warning=ExperimentalWarning src/cli.js answer",
+    "status": "node --disable-warning=ExperimentalWarning src/cli.js status",
+    "teach": "node --disable-warning=ExperimentalWarning src/cli.js teach",
+    "make": "node --disable-warning=ExperimentalWarning src/cli.js make",
+    "list": "node --disable-warning=ExperimentalWarning src/cli.js list",
+    "reset": "node --disable-warning=ExperimentalWarning src/cli.js reset",
+    "discord:setup": "node --disable-warning=ExperimentalWarning scripts/discord-setup.js",
+    "etsy:auth": "node --disable-warning=ExperimentalWarning scripts/etsy-auth.js",
+    "test": "node --disable-warning=ExperimentalWarning test/smoke.js"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

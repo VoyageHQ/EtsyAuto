@@ -1,0 +1,176 @@
+# Hartistic Valley
+
+An agent fleet that invents, designs and lists digital products for an Etsy
+shop, run from a pixel-art dashboard where every building is a real queue and
+every villager is a real agent.
+
+You approve the ideas. They do the rest.
+
+```
+npm start          # then open http://127.0.0.1:4173
+```
+
+No `npm install`. No build step. No paid services. It runs on Node 22.5+ and
+nothing else.
+
+---
+
+## What it actually does
+
+1. **The Scout** invents product ideas and puts a ranked list in front of you.
+   Nothing gets built until you say which ones you want.
+2. **The Researcher** works out what buyers type into the search box and what
+   the thing should cost.
+3. **The Maker** builds the real files — print-ready A4 and US Letter PDFs,
+   plus a spreadsheet where that makes sense.
+4. **The Scribe** writes the listing: title, 13 legal tags, description.
+5. **The Inspector** opens every file, checks it against Etsy's rules, and
+   sends anything half-finished back to the Workshop.
+6. **The Shopkeeper** packs an upload folder — or creates a draft listing
+   directly, if you have connected the Etsy API.
+7. **The Manager** keeps the whole thing moving and never approves anything
+   itself.
+
+Everything they produce lands in `out/<SKU>-<name>/`:
+
+```
+out/HV-0001-zero-based-monthly-budget-planner/
+  zero-based-monthly-budget-planner-A4.pdf         the product
+  zero-based-monthly-budget-planner-US-Letter.pdf  the product, again
+  spreadsheet/*.csv                                editable companion
+  images/1-hero.svg …                              listing images
+  preview/page-01.svg …                            page previews
+  READ-ME-FIRST.txt                                what the buyer opens first
+  design-brief.md                                  rebuild it in Canva if you like
+  LISTING.md                                       title, tags, description to paste
+  listing.csv                                      the same, for bulk tools
+```
+
+## Getting going
+
+```bash
+cp .env.example .env      # every value is optional
+npm start
+```
+
+Open <http://127.0.0.1:4173>. Click the **Research Bench** — the Scout will
+already have a list waiting. Tick the ones you want and press *build the
+selected*. Watch the villagers walk between buildings as the work moves along.
+
+Prefer a terminal?
+
+```bash
+npm run ideas -- 10 adhd     # ask for ten ideas about ADHD
+npm run queue                # see the list
+npm run approve -- idea_ab12 # build one
+npm run status               # who is doing what
+npm run make                 # work through the queue now
+```
+
+## The dashboard
+
+| Building | What it is |
+| --- | --- |
+| **Research Bench** | New ideas waiting for your yes or no. The only place work starts. |
+| **Office** | The Manager, the loop controls, and where you teach the agents. |
+| **Workshop** | Products being designed. Rebuild anything from here. |
+| **Library** | Approved ideas and finished listing copy. |
+| **Review Hall** | The Inspector's queue, and anything that failed a check. |
+| **Shopfront** | Packed and live listings. Turn the images into PNGs here. |
+| **Lookout** | What the Researcher thinks buyers want right now. |
+| **Calendar** | The season the shop is currently pushing for. |
+| **Ledger** | What the listings have actually earned. |
+
+The clock in the corner is real: the valley gets dark in the evening and the
+windows come on.
+
+## Free by design
+
+- **Design** — PDFs are generated from a vector engine written into the repo.
+  No Canva account needed, no fonts to buy, no stock art, nothing to license.
+  If you would rather design by hand, every product ships a
+  `design-brief.md` you can follow in Canva's free plan, and you can drop your
+  own PDF into the folder and press *rebuild*.
+- **Listing images** — built as SVG, then turned into the PNGs Etsy wants by
+  your own browser, in one click, from the Shopfront.
+- **The agents' brain** — works with no API key at all (`LLM_PROVIDER=offline`),
+  falling back to a built-in corpus of real product concepts and rule-based
+  copywriting. Point `LLM_BASE_URL` at a local Ollama and it stays free while
+  getting a lot more inventive. Anthropic and any OpenAI-compatible endpoint
+  are both supported — see `.env.example`.
+- **Storage** — Node's built-in SQLite, in `data/valley.db`.
+
+## Nothing goes out without you
+
+Three hard gates, and they are not configurable away:
+
+1. No idea becomes a product until you approve it.
+2. No listing leaves the valley until you approve it.
+3. Etsy listings are created as **drafts**. Going live is a deliberate change
+   to `ETSY_PUBLISH_MODE`, and even then you place it in your own shop.
+
+Anything waiting on you appears under **heads up** in the sidebar, and gets
+pushed to Discord with buttons if you have that switched on.
+
+## Teaching them
+
+Corrections stick. Type a rule in the Office (or `/teach` in Discord, or
+`npm run teach`) and it is added to that agent's prompt for every future job:
+
+```
+npm run teach -- scout      never propose anything with cartoon characters
+npm run teach -- copywriter  always use British spelling and no exclamation marks
+npm run teach -- everyone    the shop is called Hartistic, never write Hartistic Co
+```
+
+Turning an idea down *with a reason* teaches the Scout automatically. See
+[docs/TEACHING.md](docs/TEACHING.md).
+
+## Discord
+
+Each agent can appear as its own member with its own name, avatar and channel.
+The full walkthrough, including what to do in the developer portal, is in
+[docs/DISCORD.md](docs/DISCORD.md).
+
+```bash
+npm run discord:setup    # prints the roster, invite links and checks your tokens
+```
+
+## Etsy
+
+You do not need API access. Without it the Shopkeeper packs `LISTING.md` and
+you paste it in — about two minutes per product. With it, drafts are created
+for you:
+
+```bash
+npm run etsy:auth        # gets the access token your keystring cannot get alone
+```
+
+See [docs/PUBLISHING.md](docs/PUBLISHING.md).
+
+## Reading the code
+
+```
+src/core        config, sqlite, event bus, llm providers, lessons, approvals
+src/agents      one file per villager, plus the Scout's idea corpus
+src/pipeline    the job queue and the product lifecycle
+src/design      vector doc → PDF/SVG/PNG, page templates, mockups
+src/etsy        SEO rules, listing builder, upload packs, optional API
+src/discord     gateway client, per-agent bots, avatars, slash commands
+src/server      the dashboard API and static host
+src/web         the dashboard itself: canvas valley, sidebar, panels
+```
+
+More detail in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
+[docs/AGENTS.md](docs/AGENTS.md).
+
+```bash
+npm test      # the whole pipeline end to end, offline, in about a second
+```
+
+## A word on honesty
+
+The agents are instructed never to invent reviews, statistics or scarcity, and
+the Inspector rejects listings that do not say plainly that the product is a
+digital download. That is not squeamishness — vague digital listings are the
+main cause of refund requests and one-star reviews on Etsy.

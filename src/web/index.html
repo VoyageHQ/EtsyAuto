@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Valley</title>
+    <link rel="stylesheet" href="/css/app.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%231d2a24'/><rect x='7' y='8' width='2' height='6' fill='%237a5a3a'/><path d='M8 2 L13 9 H3 Z' fill='%235f8f5a'/></svg>"
+    />
+  </head>
+  <body>
+    <div id="app" class="app">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span class="brand-name" id="brand-name">valley</span>
+        </div>
+        <nav class="tabs" id="tabs" aria-label="Stations"></nav>
+        <div class="topright">
+          <div class="clock">
+            <span id="clock-time">--:--</span>
+            <span class="clock-phase" id="clock-phase">day</span>
+          </div>
+          <button class="bell" id="bell" type="button" title="Things waiting for you">
+            bell<span class="bell-dot" id="bell-dot" hidden></span>
+          </button>
+        </div>
+      </header>
+
+      <main class="stage">
+        <section class="mapwrap" id="mapwrap">
+          <canvas id="map" width="768" height="480"></canvas>
+          <div class="overlay" id="overlay"></div>
+          <div class="maphint" id="maphint">click a building</div>
+        </section>
+
+        <aside class="sidebar" id="sidebar">
+          <section class="panel">
+            <h2 class="panel-title">
+              heads up <span class="pill" id="attention-count">0</span>
+            </h2>
+            <div id="attention"></div>
+          </section>
+
+          <section class="panel">
+            <h2 class="panel-title">agents</h2>
+            <div id="agents"></div>
+          </section>
+
+          <section class="panel panel-grow">
+            <h2 class="panel-title">activity</h2>
+            <div id="activity" class="activity"></div>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <div class="modal" id="modal" hidden>
+      <div class="modal-card" role="dialog" aria-modal="true">
+        <header class="modal-head">
+          <div>
+            <h3 id="modal-title">Station</h3>
+            <p id="modal-blurb"></p>
+          </div>
+          <button id="modal-close" class="ghost" type="button">close</button>
+        </header>
+        <div class="modal-body" id="modal-body"></div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast" hidden></div>
+
+    <script type="module" src="/js/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,21 @@
+# secrets
+.env
+.env.local
+
+# local state
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+
+# generated product files + listing exports
+out/**
+!out/.gitkeep
+
+# runtime
+node_modules/
+*.log
+.DS_Store
+
+# keep the folders, not their contents
+!data/.gitkeep
