@@ -35,7 +35,8 @@ You already have a keystring and shared secret from
 listing: Etsy's v3 API needs an OAuth access token tied to your shop.
 
 ```bash
-npm run etsy:auth
+npm run etsy:auth     # gets the token
+npm run etsy:check    # proves it works, and finds your shop id
 ```
 
 That script:

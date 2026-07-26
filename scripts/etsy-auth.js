@@ -91,14 +91,38 @@ const server = createServer(async (req, res) => {
 
     // The token's own user id is the prefix before the dot.
     const userId = String(tokens.access_token).split('.')[0];
+    const auth = {
+      'x-api-key': config.etsy.keystring,
+      authorization: `Bearer ${tokens.access_token}`,
+    };
+
+    // Finding the shop used to fail silently, which left people staring at an
+    // Office that still said "link up" with no idea why. Try both endpoints
+    // Etsy offers and keep whatever went wrong so it can be printed.
     let shopId = config.etsy.shopId;
+    let shopWhy = '';
     if (!shopId) {
-      const shopRes = await fetch(`https://api.etsy.com/v3/application/users/${userId}/shops`, {
-        headers: { 'x-api-key': config.etsy.keystring, authorization: `Bearer ${tokens.access_token}` },
-      });
-      if (shopRes.ok) {
-        const shop = await shopRes.json();
-        shopId = String(shop.shop_id || shop.results?.[0]?.shop_id || '');
+      for (const path of [
+        'https://api.etsy.com/v3/application/users/me',
+        `https://api.etsy.com/v3/application/users/${userId}/shops`,
+      ]) {
+        try {
+          const res = await fetch(path, { headers: auth });
+          const text = await res.text();
+          if (!res.ok) {
+            shopWhy = `${path.split('/application')[1]} → HTTP ${res.status}: ${text.slice(0, 160)}`;
+            continue;
+          }
+          const data = JSON.parse(text);
+          const found = data.shop_id || data.results?.[0]?.shop_id;
+          if (found) {
+            shopId = String(found);
+            break;
+          }
+          shopWhy = `${path.split('/application')[1]} → answered, but carried no shop_id`;
+        } catch (err) {
+          shopWhy = `${path.split('/application')[1]} → ${err.message}`;
+        }
       }
     }
 
@@ -114,11 +138,17 @@ const server = createServer(async (req, res) => {
 
     console.log(`${green('✓')} Access token stored in .env`);
     console.log(`${green('✓')} Refresh token stored in .env ${dim('(it renews itself from now on)')}`);
-    console.log(
-      shopId
-        ? `${green('✓')} Shop id ${shopId} stored in .env\n`
-        : '\n! Could not work out your shop id. Add ETSY_SHOP_ID to .env by hand.\n'
-    );
+    if (shopId) {
+      console.log(`${green('✓')} Shop id ${shopId} stored in .env\n`);
+    } else {
+      console.log(`\n${bold('Could not work out your shop id.')} The token is fine — this is the last step.\n`);
+      if (shopWhy) console.log(dim(`  Etsy said: ${showWhy(shopWhy)}\n`));
+      console.log('  Usually this means the Etsy account you just authorised has no open shop,');
+      console.log('  or the shop belongs to a different account. A shop still in draft on Etsy');
+      console.log('  does not have an id yet.\n');
+      console.log(`  Run ${bold('npm run etsy:check')} — it retries the lookup, writes the id into .env`);
+      console.log('  if it finds one, and tells you exactly what Etsy replied if it does not.\n');
+    }
     console.log(dim('Listings will be created as DRAFTS. Nothing goes on sale unless you set'));
     console.log(dim('ETSY_PUBLISH_MODE=active yourself.\n'));
     server.close(() => process.exit(0));
@@ -130,6 +160,8 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT);
+
+const showWhy = (why) => String(why).replace(/\s+/g, ' ').slice(0, 220);
 
 /** Update .env in place, keeping comments and anything already there. */
 function writeEnv(values) {

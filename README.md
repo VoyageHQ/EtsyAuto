@@ -277,6 +277,7 @@ for you:
 
 ```bash
 npm run etsy:auth        # gets the access token your keystring cannot get alone
+npm run etsy:check       # proves the token works and finds your shop id
 ```
 
 See [docs/PUBLISHING.md](docs/PUBLISHING.md).
