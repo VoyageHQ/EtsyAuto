@@ -492,6 +492,63 @@ console.log('\nThe first sixty characters of a title');
   );
 }
 
+console.log('\nThe rail on deleting listings');
+{
+  // Re-drafting deletes things on somebody's real shop, so the rule that only
+  // drafts are ever deleted is tested rather than trusted. The HTTP layer is
+  // stubbed: nothing here touches Etsy.
+  // etsyEnabled() gates every call, so the credentials have to look present for
+  // the rail underneath it to be reachable at all. Borrowed, then given back —
+  // only the four keys, because config.etsy.enabled is a getter and spreading
+  // the object turns it into a plain value that cannot be assigned back.
+  const BORROWED = ['keystring', 'accessToken', 'shopId', 'sharedSecret'];
+  const savedEtsy = Object.fromEntries(BORROWED.map((k) => [k, config.etsy[k]]));
+  Object.assign(config.etsy, { keystring: 'test', accessToken: 'x.y', shopId: '1', sharedSecret: 's' });
+
+  const realFetch = globalThis.fetch;
+  const bodies = {
+    '/application/listings/111': { state: 'active', title: 'live', listing_images_count: 5 },
+    '/application/listings/222': { state: 'draft', title: 'draft', listing_images_count: 0 },
+  };
+  const deleted = [];
+  globalThis.fetch = async (url, opts = {}) => {
+    const path = String(url).replace('https://api.etsy.com/v3', '').split('?')[0];
+    if (opts.method === 'DELETE') {
+      deleted.push(path);
+      return new Response('{}', { status: 200 });
+    }
+    if (path.includes('/oauth/token')) {
+      return new Response(JSON.stringify({ access_token: 'x.y', expires_in: 3600 }), { status: 200 });
+    }
+    return bodies[path]
+      ? new Response(JSON.stringify(bodies[path]), { status: 200 })
+      : new Response('{"error":"not stubbed"}', { status: 404 });
+  };
+
+  const { deleteDraftListing } = await import('../src/etsy/api.js');
+  let refusedLive = false;
+  try {
+    await deleteDraftListing('111');
+  } catch (err) {
+    refusedLive = /not a draft/i.test(err.message);
+  }
+  check('a live listing is never deleted', refusedLive);
+  check('   and no DELETE was even attempted for it', !deleted.includes('/application/listings/111'));
+
+  let deletedDraft = false;
+  try {
+    await deleteDraftListing('222');
+    deletedDraft = deleted.includes('/application/listings/222');
+  } catch {
+    deletedDraft = false;
+  }
+  check('a genuine draft can be deleted', deletedDraft);
+
+  globalThis.fetch = realFetch;
+  Object.assign(config.etsy, savedEtsy);
+  check('the borrowed credentials were handed back', config.etsy.keystring === savedEtsy.keystring);
+}
+
 console.log('\nProtecting the listing images');
 {
   const spec = offlineSpec({ title: 'Habit Tracker', category: 'Fitness trackers', pitch: 'p', audience: 'a' }, 'Hartistic');

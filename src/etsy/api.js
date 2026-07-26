@@ -270,6 +270,46 @@ export async function createDraftListing({ listing, product, deliverables = [], 
   };
 }
 
+/**
+ * What Etsy currently thinks of a listing.
+ *
+ * Asked before anything destructive happens, because the local database records
+ * what this shop did, not what has happened in the shop since. Somebody may
+ * have published a draft by hand.
+ */
+export async function listingState(listingId) {
+  if (!etsyEnabled()) throw new Error('Etsy credentials are not configured.');
+  const data = await call(`/application/listings/${listingId}`);
+  return {
+    state: data.state,
+    title: data.title,
+    images: Number(data.listing_images_count ?? 0),
+    url: data.url || `https://www.etsy.com/listing/${listingId}`,
+  };
+}
+
+/**
+ * Delete a listing — but only ever a draft.
+ *
+ * The check lives here rather than in the caller so there is exactly one place
+ * it can be got wrong. An active listing carries views, favourites and possibly
+ * sales; deleting one to fix a picture would be a catastrophe dressed as a
+ * tidy-up, and Etsy does not undo it.
+ */
+export async function deleteDraftListing(listingId) {
+  if (!etsyEnabled()) throw new Error('Etsy credentials are not configured.');
+  const current = await listingState(listingId);
+  if (current.state !== 'draft') {
+    throw new Error(
+      `listing ${listingId} is "${current.state}", not a draft — refusing to delete it, ` +
+        'because a live listing carries views and favourites that do not come back'
+    );
+  }
+  await call(`/application/listings/${listingId}`, { method: 'DELETE' });
+  log({ kind: 'etsy', level: 'warn', message: `Deleted draft listing ${listingId}.` });
+  return current;
+}
+
 /** Recent shop receipts, so the Ledger has something real to show. */
 export async function fetchReceipts(limit = 25) {
   if (!etsyEnabled()) return [];
@@ -284,4 +324,11 @@ export async function fetchReceipts(limit = 25) {
   }));
 }
 
-export default { createDraftListing, fetchReceipts, etsyEnabled, resolveTaxonomy };
+export default {
+  createDraftListing,
+  deleteDraftListing,
+  listingState,
+  fetchReceipts,
+  etsyEnabled,
+  resolveTaxonomy,
+};

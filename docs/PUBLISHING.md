@@ -37,6 +37,7 @@ listing: Etsy's v3 API needs an OAuth access token tied to your shop.
 ```bash
 npm run etsy:auth     # gets the token
 npm run etsy:check    # proves it works, and finds your shop id
+npm run etsy:redraft  # replace drafts that went up without images
 ```
 
 That script:
