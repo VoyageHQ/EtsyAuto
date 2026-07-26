@@ -13,7 +13,7 @@ import {
   setVentureStage,
 } from '../ventures/pipeline.js';
 import { update, one, all } from '../core/db.js';
-import { now } from '../core/util.js';
+import { now, BadInput } from '../core/util.js';
 import { teach } from '../core/memory.js';
 
 let running = false;
@@ -227,9 +227,9 @@ function route(approval) {
  */
 export function decideIdea(ideaId, decision, note = '', source = 'dashboard') {
   const idea = getIdea(ideaId);
-  if (!idea) throw new Error('No such idea.');
+  if (!idea) throw new BadInput('No such idea.');
   if (!['approved', 'rejected', 'shelved'].includes(decision)) {
-    throw new Error(`Unknown decision "${decision}".`);
+    throw new BadInput(`Unknown decision "${decision}".`);
   }
   update('ideas', ideaId, {
     status: decision,
@@ -264,7 +264,7 @@ export function decideIdeas(ids, decision, note = '', source = 'dashboard') {
 /** Rebuild a product's files from scratch, keeping its listing copy. */
 export function rebuild(productId) {
   const product = getProduct(productId);
-  if (!product) throw new Error('No such product.');
+  if (!product) throw new BadInput('No such product.');
   setStage(productId, 'design', { status: 'active' });
   scheduleStage(getProduct(productId));
   return getProduct(productId);

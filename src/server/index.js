@@ -46,7 +46,7 @@ async function readBody(req) {
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > 12 * 1024 * 1024) throw new Error('Body too large');
+    if (size > 12 * 1024 * 1024) throw httpError(413, 'That is too big to send.');
     chunks.push(chunk);
   }
   if (!chunks.length) return {};
@@ -54,7 +54,9 @@ async function readBody(req) {
   try {
     return JSON.parse(text);
   } catch {
-    return {};
+    // Saying so beats silently pretending an empty body arrived, which turns a
+    // typo in one field into a confusing complaint about a different one.
+    throw httpError(400, 'That request body was not valid JSON.');
   }
 }
 
@@ -359,6 +361,9 @@ export function createDashboardServer() {
 
       throw httpError(404, 'Not found.');
     } catch (err) {
+      // A BadInput carries its own 400. Anything without a status really is the
+      // valley's fault, and only those belong in the activity feed — otherwise
+      // every mistyped price shows up looking like something broke.
       const status = err.status || 500;
       if (status >= 500) {
         log({ kind: 'server', level: 'error', message: `${req.method} ${path}: ${err.message}`, discord: false });

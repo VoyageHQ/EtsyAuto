@@ -107,3 +107,21 @@ export function money(amount, currency = 'GBP') {
   const symbol = symbols[currency] || '';
   return `${symbol}${Number(amount || 0).toFixed(2)}`;
 }
+
+/**
+ * Something the caller got wrong, as opposed to something the valley got
+ * wrong.
+ *
+ * The difference matters at both ends. The dashboard needs a 400 it can show
+ * next to the box you mistyped, rather than a 500 it can only apologise for;
+ * and the activity feed must not fill up with red "error" lines every time you
+ * paste a URL that turns out not to be an Etsy listing. Core modules throw it
+ * without knowing HTTP exists — the server does the translating.
+ */
+export class BadInput extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'BadInput';
+    this.status = 400;
+  }
+}

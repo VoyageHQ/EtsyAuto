@@ -2,7 +2,7 @@
 // anything that reaches the outside world — or costs you money, or puts your
 // shop name on something — stops here and waits for you.
 import { all, insert, one, update, json } from './db.js';
-import { uid, now } from './util.js';
+import { uid, now, BadInput } from './util.js';
 import { bus, log, pushState } from './events.js';
 
 /**
@@ -57,7 +57,7 @@ export function getApproval(id) {
 
 export function answer(id, value, source = 'dashboard') {
   const approval = getApproval(id);
-  if (!approval) throw new Error(`No such request: ${id}`);
+  if (!approval) throw new BadInput(`No such request: ${id}`);
   if (approval.status !== 'open') return approval;
   update('approvals', id, { status: 'answered', answer: String(value), answered_at: now() });
   const updated = getApproval(id);

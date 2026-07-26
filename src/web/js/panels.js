@@ -528,11 +528,15 @@ function officePanel(state, ctx) {
         </div>
         <div class="tile">
           <h4>The loop</h4>
-          <p>Ticking ${state.shop.autoLoop ? 'automatically' : 'only when you say so'}.</p>
+          <p>${
+            state.shop.loopRunning
+              ? 'Running — the agents pick up work on their own.'
+              : 'Paused. Nothing moves until you press <b>do one job now</b> or start it.'
+          }</p>
           <div class="actions">
             <button class="tiny" data-act="tick">do one job now</button>
-            <button class="tiny" data-act="loop-on">start loop</button>
-            <button class="tiny" data-act="loop-off">pause loop</button>
+            <button class="tiny" data-act="loop-on"${state.shop.loopRunning ? ' disabled' : ''}>start loop</button>
+            <button class="tiny" data-act="loop-off"${state.shop.loopRunning ? '' : ' disabled'}>pause loop</button>
           </div>
         </div>
         <div class="tile">
@@ -648,13 +652,17 @@ function officePanel(state, ctx) {
           const { worked } = await api.tick();
           ctx.toast(worked ? 'one job done' : 'nothing waiting');
         }
+        // Refresh so the tile and its buttons show what the loop is actually
+        // doing, rather than leaving a "start loop" button lit on a running loop.
         if (act === 'loop-on') {
           await api.loop(true);
           ctx.toast('loop running');
+          return ctx.refresh(true);
         }
         if (act === 'loop-off') {
           await api.loop(false);
           ctx.toast('loop paused');
+          return ctx.refresh(true);
         }
         if (act === 'restore') {
           const { added } = await api.restoreKnowledge();

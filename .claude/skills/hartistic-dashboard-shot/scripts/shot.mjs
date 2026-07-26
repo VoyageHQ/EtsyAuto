@@ -22,7 +22,9 @@ const PORT = Number(process.env.CDP_PORT || 9333);
 function chromePath() {
   if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
   const root = process.env.PLAYWRIGHT_BROWSERS_PATH || '/opt/pw-browsers';
-  const candidates = [join(root, 'chromium', 'chrome-linux', 'chrome')];
+  // Playwright's 'chromium' entry is a symlink straight to the binary on some
+  // images and a directory on others, so try both shapes.
+  const candidates = [join(root, 'chromium'), join(root, 'chromium', 'chrome-linux', 'chrome')];
   if (existsSync(root)) {
     for (const dir of readdirSync(root).filter((d) => d.startsWith('chromium-'))) {
       candidates.push(join(root, dir, 'chrome-linux', 'chrome'));

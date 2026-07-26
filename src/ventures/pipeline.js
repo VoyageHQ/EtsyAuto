@@ -20,29 +20,46 @@ const STAGE_OWNER = {
 
 // --- signals ---------------------------------------------------------------
 
-/** Store what was harvested, ignoring anything already seen. */
+/**
+ * Store what was harvested, ignoring anything already seen.
+ *
+ * Signals come from other people's servers — Hacker News, a subreddit, whatever
+ * RSS feed you pointed it at — and a feed that changes shape mid-harvest is
+ * normal, not exceptional. One malformed post must cost one post, never the
+ * whole run, so every field is coerced to something SQLite will accept and a
+ * signal with nothing to identify it is skipped rather than thrown.
+ */
 export function saveSignals(signals) {
   let added = 0;
-  for (const signal of signals) {
-    const exists = one(
-      'SELECT id FROM signals WHERE source = ? AND external_id = ?',
-      signal.source,
-      signal.externalId
-    );
+  for (const raw of Array.isArray(signals) ? signals : []) {
+    if (!raw || typeof raw !== 'object') continue;
+
+    const text = (value) => (value === undefined || value === null ? null : String(value));
+    const number = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
+
+    const source = text(raw.source) || 'unknown';
+    // Without a stable id we cannot tell a repeat from a new post, so fall back
+    // to the URL — the one thing every source has — and drop it if even that is
+    // missing rather than filling the table with duplicates.
+    const externalId = text(raw.externalId) || text(raw.url);
+    if (!externalId) continue;
+
+    const exists = one('SELECT id FROM signals WHERE source = ? AND external_id = ?', source, externalId);
     if (exists) continue;
+
     insert('signals', {
       id: uid('sig'),
-      source: signal.source,
-      external_id: signal.externalId,
-      title: signal.title,
-      text: signal.text,
-      url: signal.url,
-      author: signal.author,
-      score: signal.score,
-      comments: signal.comments,
-      phrase: signal.phrase,
-      channel: signal.channel,
-      posted_at: signal.postedAt,
+      source,
+      external_id: externalId,
+      title: text(raw.title),
+      text: text(raw.text),
+      url: text(raw.url),
+      author: text(raw.author),
+      score: number(raw.score),
+      comments: number(raw.comments),
+      phrase: text(raw.phrase),
+      channel: text(raw.channel),
+      posted_at: number(raw.postedAt) || now(),
       harvested_at: now(),
       used: 0,
     });

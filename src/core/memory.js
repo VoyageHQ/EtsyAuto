@@ -1,7 +1,7 @@
 // Teaching. Anything you tell an agent here is injected into its prompt for
 // every future job, so corrections stick without touching code.
 import { all, insert, one, run, update } from './db.js';
-import { uid, now } from './util.js';
+import { uid, now, BadInput } from './util.js';
 import { log, pushState } from './events.js';
 
 /**
@@ -12,7 +12,7 @@ import { log, pushState } from './events.js';
  */
 export function teach(agentId, text, source = 'dashboard', division = null) {
   const clean = String(text || '').trim();
-  if (!clean) throw new Error('A lesson needs some text.');
+  if (!clean) throw new BadInput('A lesson needs some text.');
   const id = uid('les');
   insert('lessons', {
     id,

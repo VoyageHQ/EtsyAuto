@@ -17,6 +17,7 @@ import { openApprovals } from '../core/approvals.js';
 import { allLessons } from '../core/memory.js';
 import { packSummary } from '../knowledge/index.js';
 import { queuedCount, recentJobs } from '../pipeline/queue.js';
+import { isRunning } from '../pipeline/orchestrator.js';
 import { listProducts, getListing, assetsFor } from '../pipeline/products.js';
 import { llm } from '../core/llm.js';
 import { etsyEnabled } from '../etsy/api.js';
@@ -108,6 +109,9 @@ export function buildState() {
       etsy: { connected: etsyEnabled(), mode: config.etsy.publishMode },
       discord: { connected: Boolean(getSetting('discord_ready')) },
       autoLoop: config.autoLoop,
+      // What the loop is doing now, which is not the same as what .env asked
+      // for: press pause and this goes false while autoLoop stays true.
+      loopRunning: isRunning(),
     },
     // The dashboard shows one district at a time; both travel in the payload
     // because the whole thing is small and swapping instantly feels better.
