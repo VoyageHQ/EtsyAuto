@@ -229,6 +229,11 @@ src/web         the dashboard itself: canvas valley, sidebar, panels
 More detail in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
 [docs/AGENTS.md](docs/AGENTS.md) and [docs/LEARNING.md](docs/LEARNING.md).
 
+If you work on this with Claude Code, `.claude/skills/` holds six skills that
+teach it how this repo is put together — adding a villager, writing a knowledge
+pack, extending the design engine, triaging a stalled valley, screenshotting
+the dashboard, and what must never be committed.
+
 ```bash
 npm test      # the whole pipeline end to end, offline, in about a second
 ```

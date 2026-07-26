@@ -23,3 +23,6 @@ node_modules/
 # generated venture projects: your code and real signup data
 ventures/**
 !ventures/.gitkeep
+
+# claude code local settings
+.claude/settings.local.json
