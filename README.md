@@ -134,8 +134,16 @@ windows come on.
   If you would rather design by hand, every product ships a
   `design-brief.md` you can follow in Canva's free plan, and you can drop your
   own PDF into the folder and press *rebuild*.
-- **Listing images** — built as SVG, then turned into the PNGs Etsy wants by
-  your own browser, in one click, from the Shopfront.
+- **Listing images** — built as SVG, then rendered to the PNGs Etsy wants by
+  whatever browser is already on your machine. No install, no service, no
+  manual step: the Shopkeeper does it before it creates the draft. The
+  Shopfront's *save pngs* button still works if you would rather do it yourself.
+- **Watermarks** — every listing image carries a faint tiled mark, because for
+  a printable the preview images *are* the product and a 2400px picture of
+  every page is enough to print from. Point `SHOP_LOGO` at your own logo to use
+  that instead of the shop name. It is lighter on the hero, which has to make
+  the sale, and full strength on the images showing whole readable pages, which
+  are the ones worth stealing.
 - **The agents' brain** — works with no API key at all (`LLM_PROVIDER=offline`),
   falling back to a built-in corpus of real product concepts and rule-based
   copywriting. Point `LLM_BASE_URL` at a local Ollama and it stays free while

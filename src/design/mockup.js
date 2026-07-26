@@ -114,22 +114,25 @@ export function buildMockups(spec, doc, opts = {}) {
     const rows = Math.ceil(show.length / cols);
     const cellW = (W - 160) / cols;
     const thumbW = Math.min(cellW - 30, (H - 240) / rows / 1.414);
+    // Every thumbnail first, then every label. Interleaving them meant a label
+    // on one row was painted before the row beneath it and quietly covered up —
+    // the first two of eight pages came out unnamed.
+    const labels = [];
     show.forEach((page, i) => {
       const col = i % cols;
       const row = Math.floor(i / cols);
       const x = 80 + col * cellW + (cellW - thumbW) / 2;
       const yTop = 160 + row * ((H - 230) / rows);
       parts.push(pageCard(page, x, yTop, thumbW));
-      const label = page.meta?.kind === 'cover' ? 'Cover' : titleOf(spec, i);
-      parts.push(
-        text(x + thumbW / 2, yTop + thumbW * 1.414 + 26, label, {
-          size: 15,
-          bold: true,
-          fill: pal.faint,
-          align: 'center',
-        })
-      );
+      labels.push({
+        x: x + thumbW / 2,
+        y: yTop + thumbW * 1.414 + 22,
+        label: page.meta?.kind === 'cover' ? 'Cover' : titleOf(spec, i),
+      });
     });
+    for (const { x, y, label } of labels) {
+      parts.push(text(x, y, label, { size: 15, bold: true, fill: pal.faint, align: 'center' }));
+    }
     parts.push('</svg>');
     out.push({ name: '2-contents', svg: parts.join('\n') });
   }
@@ -180,7 +183,93 @@ export function buildMockups(spec, doc, opts = {}) {
     out.push({ name: '4-closeup', svg: parts.join('\n') });
   }
 
-  return out;
+  return protect(out, opts.watermark);
+}
+
+/**
+ * A watermark, laid over a finished listing image.
+ *
+ * Printables get lifted. The preview images are the whole product for a
+ * planner — somebody can screenshot a page grid at 2400px and print from it
+ * without ever paying — so the images that sell the thing also have to be
+ * slightly spoiled for anyone using them as the thing itself.
+ *
+ * The balance matters in both directions. Too faint and it protects nothing;
+ * too strong and it damages the image that has one second to make the sale.
+ * Tiled diagonal marks at low opacity are the compromise the market has
+ * settled on: legible enough to be a nuisance to a thief, quiet enough that a
+ * buyer stops noticing it after a moment.
+ *
+ * @param {object} mark { logo?: string (data URI), text?: string, opacity?: number }
+ */
+let markSeq = 0;
+
+function watermark(mark) {
+  if (!mark) return '';
+  const opacity = Math.min(0.5, Math.max(0.02, Number(mark.opacity) || 0.1));
+  // Unique per image: ids are global to a document, and several of these end up
+  // side by side in the dashboard, where a shared id makes them all wear the
+  // first one's opacity.
+  const id = `wm${++markSeq}`;
+
+  // A tile drawn once and repeated by the renderer, so the file stays small
+  // however large the image is.
+  const tile = 260;
+  const inner = mark.logo
+    ? `<image href="${mark.logo}" x="0" y="0" width="150" height="150"
+         preserveAspectRatio="xMidYMid meet" opacity="${opacity}"/>`
+    : `<text x="0" y="100" font-family="${FAMILY}" font-size="34" font-weight="700"
+         letter-spacing="3" fill="#000000" opacity="${opacity}">${esc(mark.text || '')}</text>`;
+
+  return `
+    <defs>
+      <pattern id="${id}" patternUnits="userSpaceOnUse" width="${tile}" height="${tile}"
+               patternTransform="rotate(-30)">
+        ${inner}
+      </pattern>
+    </defs>
+    <rect width="${W}" height="${H}" fill="url(#${id})" pointer-events="none"/>`;
+}
+
+/**
+ * Put the watermark on every image, just inside the closing tag so it sits
+ * above the artwork.
+ *
+ * Done here rather than in each builder so a new mockup can never be added
+ * without protection — forgetting is the failure mode that matters.
+ */
+/**
+ * How much mark each image needs.
+ *
+ * Not every image is equally worth stealing, and not every image can afford to
+ * be spoiled. The hero shows three pages fanned and overlapping — useless to
+ * copy from — and it is the one picture that has to make the sale, so it gets a
+ * lighter touch. The contents grid and the close-up show whole readable pages,
+ * which is precisely what somebody would screenshot instead of buying, so they
+ * carry the mark at full strength.
+ */
+const MARK_STRENGTH = {
+  '1-hero': 0.55,
+  '2-contents': 1,
+  '3-details': 0.8,
+  '4-closeup': 1,
+};
+
+/**
+ * Put the watermark on every image, just inside the closing tag so it sits
+ * above the artwork.
+ *
+ * Done here rather than in each builder so a new mockup can never be added
+ * without protection — forgetting is the failure mode that matters, and an
+ * unknown name defaults to full strength for that reason.
+ */
+function protect(images, mark) {
+  if (!mark) return images;
+  return images.map((image) => {
+    const strength = MARK_STRENGTH[image.name] ?? 1;
+    const overlay = watermark({ ...mark, opacity: (Number(mark.opacity) || 0.1) * strength });
+    return { ...image, svg: image.svg.replace(/<\/svg>\s*$/, `${overlay}\n</svg>`) };
+  });
 }
 
 function titleOf(spec, index) {

@@ -9,6 +9,7 @@ import { sheetsFromSpec } from './templates/plan.js';
 import { renderPdf } from './pdf.js';
 import { renderSvgPage } from './svg.js';
 import { buildMockups } from './mockup.js';
+import { watermarkFor } from './watermark.js';
 
 const PAPERS = [
   { key: 'A4', suffix: 'A4' },
@@ -73,6 +74,7 @@ export function buildProduct(product, spec) {
   for (const mockup of buildMockups(spec, primaryDoc, {
     price: product.price,
     currency: currencySymbol(config.currency),
+    watermark: watermarkFor(),
   })) {
     const path = join(dir, 'images', `${mockup.name}.svg`);
     writeFileSync(path, mockup.svg);

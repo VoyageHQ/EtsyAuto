@@ -32,6 +32,12 @@ import { uid } from '../src/core/util.js';
 import { auditListing, buildTitle, buildTags } from '../src/etsy/seo.js';
 import { SEEDS } from '../src/agents/ideas-corpus.js';
 import { offlineSpec } from '../src/design/templates/plan.js';
+import { buildDoc } from '../src/design/templates/layout.js';
+import { buildMockups } from '../src/design/mockup.js';
+import { watermarkFor } from '../src/design/watermark.js';
+
+/** The mark's opacity in a built image, for comparing one image against another. */
+const opacityOf = (image) => Number(String(image?.svg).match(/opacity="([\d.]+)"/g)?.slice(-1)[0]?.match(/[\d.]+/)?.[0] || 0);
 import { avatarFor } from '../src/discord/avatars.js';
 import { loadKnowledge, packSummary } from '../src/knowledge/index.js';
 import { writeBackup, readBackup } from '../src/core/backup.js';
@@ -484,6 +490,36 @@ console.log('\nThe first sixty characters of a title');
     'titles stay inside what Etsy accepts',
     buildTitle({ name: 'A'.repeat(120), keyword: 'x', audience: 'y' }).length <= 140
   );
+}
+
+console.log('\nProtecting the listing images');
+{
+  const spec = offlineSpec({ title: 'Habit Tracker', category: 'Fitness trackers', pitch: 'p', audience: 'a' }, 'Hartistic');
+  const doc = buildDoc(spec, 'A4');
+
+  const marked = buildMockups(spec, doc, { watermark: watermarkFor() });
+  check('every listing image carries a mark', marked.every((m) => /pattern id="wm/.test(m.svg)), `${marked.length} images`);
+  check(
+    '   each with its own pattern id, so they do not share one opacity',
+    new Set(marked.map((m) => m.svg.match(/pattern id="(wm\d+)"/)?.[1])).size === marked.length
+  );
+  check(
+    '   lighter on the hero, which has to make the sale',
+    opacityOf(marked.find((m) => m.name === '1-hero')) < opacityOf(marked.find((m) => m.name === '2-contents'))
+  );
+  check(
+    '   and full strength on the pages someone could copy',
+    opacityOf(marked.find((m) => m.name === '2-contents')) > 0
+  );
+
+  const bare = buildMockups(spec, doc, {});
+  check('and it can be switched off entirely', bare.every((m) => !/pattern id="wm/.test(m.svg)));
+
+  // A page written with `body` instead of `blocks` used to render as a heading
+  // over a blank sheet — inside something sold.
+  const instructions = { kind: 'instructions', title: 'How to use this', body: ['First thing.', 'Second thing.'] };
+  const page = buildDoc({ ...spec, pages: [instructions] }, 'A4').pages[0];
+  check('an instructions page written either way has content on it', /First thing/.test(JSON.stringify(page.ops || page)));
 }
 
 console.log('\nThe Harbour proposing things that make sense');

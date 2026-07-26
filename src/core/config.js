@@ -56,6 +56,12 @@ export const config = {
   dbPath: join(dataDir, 'valley.db'),
 
   shopName: str('SHOP_NAME', 'Hartistic'),
+  // Your logo, laid over every listing image so a screenshot of the preview is
+  // not a usable copy of the product. Any path relative to the project root.
+  // With no logo the shop name is used instead, which still spoils a lift.
+  logoPath: str('SHOP_LOGO'),
+  watermarkOpacity: num('WATERMARK_OPACITY', 0.1),
+  watermark: str('WATERMARK', 'on').toLowerCase() !== 'off',
   valleyName: str('VALLEY_NAME', str('SHOP_NAME', 'Hartistic') + ' Valley'),
   currency: str('SHOP_CURRENCY', 'GBP'),
 

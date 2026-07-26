@@ -6,7 +6,7 @@
 // rail keeps every listing in DRAFT unless you deliberately change
 // ETSY_PUBLISH_MODE.
 import { readFileSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename, extname, join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import config from '../core/config.js';
 import { log } from '../core/events.js';
@@ -111,6 +111,21 @@ async function call(path, { method = 'GET', body, headers = {}, raw } = {}) {
   return text ? JSON.parse(text) : {};
 }
 
+/** What a deliverable actually is, so Etsy labels the download correctly. */
+const FILE_TYPES = {
+  '.pdf': 'application/pdf',
+  '.csv': 'text/csv',
+  '.txt': 'text/plain',
+  '.md': 'text/markdown',
+  '.zip': 'application/zip',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.svg': 'image/svg+xml',
+};
+
+const fileType = (path) => FILE_TYPES[extname(path).toLowerCase()] || 'application/octet-stream';
+
 /** Find a taxonomy id by name, because Etsy insists on one. */
 export async function resolveTaxonomy(hint = 'Digital Prints') {
   const cacheKey = `etsy_taxonomy_${hint.toLowerCase().replace(/\s+/g, '_')}`;
@@ -213,10 +228,18 @@ export async function createDraftListing({ listing, product, deliverables = [], 
     }
   }
 
+  // Etsy takes five files per listing, up to 20MB each.
   for (const path of deliverables.slice(0, 5)) {
     try {
       const { body, contentType } = multipart([
-        { name: 'file', filename: basename(path), contentType: 'application/pdf', data: readFileSync(path) },
+        {
+          name: 'file',
+          filename: basename(path),
+          // Was hardcoded to application/pdf, which mislabelled every
+          // spreadsheet the Maker ships alongside the printable.
+          contentType: fileType(path),
+          data: readFileSync(path),
+        },
         { name: 'name', value: basename(path) },
       ]);
       await call(`/application/shops/${config.etsy.shopId}/listings/${listingId}/files`, {

@@ -564,7 +564,16 @@ function drawPoster(page, spec, pageSpec, pal) {
 function drawInstructions(page, spec, pageSpec, pal, startY) {
   const f = frame(page, pal);
   let y = startY;
-  const blocks = pageSpec.blocks || [];
+
+  // `blocks` is a list of {title, body}. A plain `body` array of sentences is
+  // the other obvious way to write this page, and it used to produce a page
+  // with nothing on it but a heading — a blank sheet inside something sold.
+  // Accept both rather than punishing the reasonable guess.
+  const blocks = pageSpec.blocks?.length
+    ? pageSpec.blocks
+    : (Array.isArray(pageSpec.body) ? pageSpec.body : [pageSpec.body])
+        .filter(Boolean)
+        .map((body, i) => ({ title: `Step ${i + 1}`, body: String(body) }));
   for (const block of blocks) {
     page.text(f.x, y, String(block.title || '').toUpperCase(), {
       size: 9,

@@ -6,8 +6,10 @@ import config from '../core/config.js';
 import { getProduct, getListing, assetsFor, setStage } from '../pipeline/products.js';
 import { writeListingPack } from '../etsy/export.js';
 import { createDraftListing, etsyEnabled } from '../etsy/api.js';
-import { update } from '../core/db.js';
-import { now, money } from '../core/util.js';
+import { rasterise, findBrowser } from '../design/rasterise.js';
+import { insert, update, one } from '../core/db.js';
+import { uid, now, money } from '../core/util.js';
+import { existsSync, statSync } from 'node:fs';
 
 export class Lister extends Agent {
   constructor() {
@@ -27,6 +29,67 @@ say so plainly.`,
     });
   }
 
+  /**
+   * The listing images, as PNG paths on disk.
+   *
+   * The mockups are built as SVG so they can embed the real pages at any size
+   * for nothing, but Etsy only accepts raster. Any PNGs already exported from
+   * the dashboard are used as they are; the rest are rendered here with
+   * whatever browser the machine has, which is how this stays free.
+   */
+  async ensureImages(product) {
+    const assets = assetsFor(product.id);
+    const mockups = assets.filter((a) => a.role === 'mockup');
+
+    const ready = mockups
+      .filter((a) => a.kind === 'png')
+      .map((a) => join(config.root, a.path))
+      .filter((path) => existsSync(path));
+    if (ready.length) return ready.slice(0, 10);
+
+    const jobs = mockups
+      .filter((a) => a.kind === 'svg' && existsSync(join(config.root, a.path)))
+      .map((a) => ({
+        svgPath: join(config.root, a.path),
+        pngPath: join(config.root, a.path).replace(/\.svg$/i, '.png'),
+        label: a.label,
+      }));
+    if (!jobs.length) return [];
+
+    const { written, failed, browser } = await rasterise(jobs);
+    if (failed.length) {
+      this.say(
+        `${failed.length} listing image(s) would not render${browser ? '' : ' — no browser on this machine'}.`,
+        { kind: 'images', level: 'warn', discord: false }
+      );
+    }
+
+    // Record them so the Shopfront and the Inspector can see them too, and so a
+    // rebuild does not redo work that is already done.
+    for (const path of written) {
+      const rel = path.replace(config.root + '/', '');
+      if (one('SELECT id FROM assets WHERE product_id = ? AND path = ?', product.id, rel)) continue;
+      insert('assets', {
+        id: uid('as'),
+        product_id: product.id,
+        kind: 'png',
+        role: 'mockup',
+        label: jobs.find((j) => j.pngPath === path)?.label || 'image',
+        path: rel,
+        bytes: statSync(path).size,
+        created_at: now(),
+      });
+    }
+    if (written.length) {
+      this.say(`${written.length} listing image(s) rendered for ${product.sku}.`, {
+        kind: 'images',
+        level: 'good',
+        discord: false,
+      });
+    }
+    return written.slice(0, 10);
+  }
+
   async handle(job) {
     const product = getProduct(job.payload.productId);
     if (!product) return { result: { skipped: 'product gone' } };
@@ -42,11 +105,23 @@ say so plainly.`,
         const deliverables = assets
           .filter((a) => a.role === 'deliverable')
           .map((a) => join(config.root, a.path));
-        // Etsy needs raster images. Any PNGs saved from the dashboard get used;
-        // otherwise the draft goes up without images for you to add.
-        const images = assets
-          .filter((a) => a.role === 'mockup' && a.kind === 'png')
-          .map((a) => join(config.root, a.path));
+        // Etsy will only take raster images, and it will not let a listing
+        // without one be published at all. So make them now rather than hoping
+        // somebody pressed "save pngs" in the Shopfront first — which is what
+        // used to happen, and why drafts arrived with no pictures.
+        const images = await this.ensureImages(product);
+
+        if (!images.length) {
+          this.say(
+            `${product.sku} is ready but I could not make the listing images, and Etsy will not let a ` +
+              'listing be published without one. Open the Shopfront and press "save pngs", then ' +
+              'approve it again — your browser can do it in a click.' +
+              (findBrowser() ? '' : ' (No Chrome, Edge or Chromium found on this machine.)'),
+            { kind: 'listed', level: 'warn', meta: { productId: product.id } }
+          );
+          this.goHome();
+          return { result: { held: 'no listing images' } };
+        }
 
         const created = await createDraftListing({ listing, product, deliverables, images });
         update('listings', listing.id, {
@@ -57,8 +132,8 @@ say so plainly.`,
         });
         setStage(product.id, 'listed', { status: 'done' });
         this.say(
-          `${product.sku} is a ${created.state} listing on Etsy: ${created.url}` +
-            (images.length ? '' : ' — no images attached yet, save the PNGs from the dashboard and add them.'),
+          `${product.sku} is a ${created.state} listing on Etsy with ${images.length} image(s) ` +
+            `and ${deliverables.length} file(s) attached: ${created.url}`,
           { kind: 'listed', level: 'good', meta: { productId: product.id, url: created.url } }
         );
         this.goHome();
