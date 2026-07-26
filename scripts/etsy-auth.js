@@ -26,6 +26,14 @@ if (!config.etsy.keystring) {
   process.exit(1);
 }
 
+if (!config.etsy.sharedSecret) {
+  console.log(
+    `\n${dim('Note: ETSY_SHARED_SECRET is empty. An app still in developer mode needs it —')}\n` +
+      `${dim('Etsy refuses the keystring on its own. Add it now if you have it, or run')}\n` +
+      `${dim('npm run etsy:check afterwards and it will tell you whether yours is one of those.')}\n`
+  );
+}
+
 const base64url = (buf) => buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 const verifier = base64url(randomBytes(48));
 const challenge = base64url(createHash('sha256').update(verifier).digest());
@@ -91,8 +99,14 @@ const server = createServer(async (req, res) => {
 
     // The token's own user id is the prefix before the dot.
     const userId = String(tokens.access_token).split('.')[0];
+    // An app still in developer mode is refused the keystring on its own and
+    // wants keystring:shared_secret. Prefer that form when the secret is to
+    // hand: Etsy accepts it in both app states, so it is the safe default here.
+    const apiKey = config.etsy.sharedSecret
+      ? `${config.etsy.keystring}:${config.etsy.sharedSecret}`
+      : config.etsy.keystring;
     const auth = {
-      'x-api-key': config.etsy.keystring,
+      'x-api-key': apiKey,
       authorization: `Bearer ${tokens.access_token}`,
     };
 

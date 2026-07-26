@@ -44,21 +44,67 @@ async function accessToken() {
   return data.access_token;
 }
 
+/**
+ * What goes in the x-api-key header.
+ *
+ * Etsy wants different things depending on where your app is in its lifecycle.
+ * An app still in developer mode is refused the keystring on its own —
+ * "Shared secret is required in x-api-key header" — and wants
+ * `keystring:shared_secret`. An approved commercial app takes the keystring
+ * alone. Neither state is discoverable in advance, so the first refusal
+ * decides it and the answer is remembered.
+ */
+const combinedKey = () =>
+  config.etsy.sharedSecret
+    ? `${config.etsy.keystring}:${config.etsy.sharedSecret}`
+    : config.etsy.keystring;
+
+const apiKey = () =>
+  getSetting('etsy_api_key_form') === 'combined' ? combinedKey() : config.etsy.keystring;
+
+/** Is this the specific refusal that means "send the shared secret too"? */
+const wantsSharedSecret = (status, text) =>
+  status === 403 && /shared secret is required/i.test(String(text));
+
 async function call(path, { method = 'GET', body, headers = {}, raw } = {}) {
   const token = await accessToken();
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers: {
-      'x-api-key': config.etsy.keystring,
-      authorization: `Bearer ${token}`,
-      ...(raw ? {} : { 'content-type': 'application/json' }),
-      ...headers,
-    },
-    body: raw ? body : body ? JSON.stringify(body) : undefined,
-  });
-  const text = await res.text();
+
+  const attempt = (key) =>
+    fetch(`${BASE}${path}`, {
+      method,
+      headers: {
+        'x-api-key': key,
+        authorization: `Bearer ${token}`,
+        ...(raw ? {} : { 'content-type': 'application/json' }),
+        ...headers,
+      },
+      body: raw ? body : body ? JSON.stringify(body) : undefined,
+    });
+
+  let res = await attempt(apiKey());
+  let text = await res.text();
+
+  // Switch form and try once more, so a developer-mode app works without the
+  // owner having to know any of this.
+  if (wantsSharedSecret(res.status, text) && config.etsy.sharedSecret) {
+    setSetting('etsy_api_key_form', 'combined');
+    log({
+      kind: 'etsy',
+      message: 'Etsy wants the shared secret alongside the keystring — switching to that form.',
+      discord: false,
+    });
+    res = await attempt(combinedKey());
+    text = await res.text();
+  }
+
   if (!res.ok) {
-    const err = new Error(`Etsy ${method} ${path} → ${res.status}: ${text.slice(0, 300)}`);
+    let hint = '';
+    if (wantsSharedSecret(res.status, text)) {
+      hint =
+        ' — your app is in developer mode, which needs ETSY_SHARED_SECRET in .env as well as' +
+        ' ETSY_KEYSTRING. Run npm run etsy:check.';
+    }
+    const err = new Error(`Etsy ${method} ${path} → ${res.status}: ${text.slice(0, 300)}${hint}`);
     err.status = res.status;
     throw err;
   }

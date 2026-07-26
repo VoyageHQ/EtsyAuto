@@ -40,12 +40,19 @@ if (!keystring || !token) {
   process.exit(1);
 }
 
-const headers = { 'x-api-key': keystring, authorization: `Bearer ${token}` };
+// Etsy wants different things in x-api-key depending on whether the app has
+// been approved yet. Work out which, once, before testing anything else —
+// otherwise every check below fails for the same unrelated reason.
+const combined = config.etsy.sharedSecret ? `${keystring}:${config.etsy.sharedSecret}` : null;
+let apiKey = keystring;
+let keyForm = 'keystring only';
 
 /** Call Etsy and always come back with something printable. */
 async function ask(path) {
   try {
-    const res = await fetch(`${BASE}${path}`, { headers });
+    const res = await fetch(`${BASE}${path}`, {
+      headers: { 'x-api-key': apiKey, authorization: `Bearer ${token}` },
+    });
     const text = await res.text();
     let body = null;
     try {
@@ -59,9 +66,64 @@ async function ask(path) {
   }
 }
 
+/**
+ * The ping endpoint needs the api key and nothing else, which makes it the
+ * right place to settle the header question without involving the token.
+ */
+async function settleKeyForm() {
+  for (const [form, key] of [
+    ['keystring only', keystring],
+    ['keystring:shared_secret', combined],
+  ]) {
+    if (!key) continue;
+    try {
+      const res = await fetch(`${BASE}/application/openapi-ping`, { headers: { 'x-api-key': key } });
+      if (res.ok) {
+        apiKey = key;
+        keyForm = form;
+        return { ok: true, form };
+      }
+      const text = await res.text();
+      if (/shared secret is required/i.test(text) && combined) continue;
+      return { ok: false, status: res.status, body: text.slice(0, 200) };
+    } catch (err) {
+      return { ok: false, status: 0, body: err.message };
+    }
+  }
+  return {
+    ok: false,
+    status: 403,
+    body: combined
+      ? 'neither the keystring nor keystring:shared_secret was accepted'
+      : 'Etsy wants the shared secret too, but ETSY_SHARED_SECRET is empty in .env',
+  };
+}
+
 // --- does the token work at all? -------------------------------------------
 
 console.log(`\n${bold('Talking to Etsy')}\n`);
+
+const keyCheck = await settleKeyForm();
+if (!keyCheck.ok) {
+  report('the keystring is accepted', false, `HTTP ${keyCheck.status}`);
+  console.log(`\n  Etsy said: ${dim(String(keyCheck.body))}\n`);
+  if (!combined) {
+    console.log(`  ${amber('Your app is in developer mode.')} Etsy will not accept the keystring on its`);
+    console.log('  own until the app is approved for commercial use — it wants the shared secret');
+    console.log('  in the same header. Add this to .env and run this again:\n');
+    console.log(`    ${bold('ETSY_SHARED_SECRET=')}${dim('the shared secret from your app page')}\n`);
+    console.log('  https://www.etsy.com/developers/your-apps\n');
+  } else {
+    console.log('  Both header forms were refused, so the keystring or the secret is wrong.');
+    console.log('  Check them character-for-character against your app page.\n');
+    console.log('  https://www.etsy.com/developers/your-apps\n');
+  }
+  process.exit(1);
+}
+report('the keystring is accepted', true, keyForm);
+if (keyForm !== 'keystring only') {
+  console.log(`    ${dim('· that form means the app is still in developer mode, which is fine')}`);
+}
 
 const me = await ask('/application/users/me');
 if (me.ok) {
