@@ -35,6 +35,9 @@ export function createProductFromIdea(idea) {
     research: null,
     price: null,
     dir: `${sku}-${slug(idea.title, 48)}`,
+    // Carried through so the Maker knows to build this one differently rather
+    // than produce the same pages under a new SKU.
+    variant_of: idea.similar_to ?? idea.similarTo ?? null,
     created_at: now(),
     updated_at: now(),
   });

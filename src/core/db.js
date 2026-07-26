@@ -286,6 +286,11 @@ CREATE INDEX IF NOT EXISTS failures_pattern ON failures(pattern);
 // start: SQLite refuses a duplicate and we ignore that.
 for (const [table, column, type] of [
   ['lessons', 'division', 'TEXT'], // so shop rules never reach venture agents
+  // A near-duplicate is kept now rather than dropped, so it has to carry what
+  // it is close to — the owner decides, and the Maker deliberately varies it.
+  ['ideas', 'similar_to', 'TEXT'],
+  ['ideas', 'similarity', 'REAL'],
+  ['products', 'variant_of', 'TEXT'],
 ]) {
   try {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);

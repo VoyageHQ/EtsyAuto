@@ -49,9 +49,18 @@ What you care about:
       prompt: this.specPrompt(product, idea),
     });
 
+    // A product the owner approved knowing it was close to something else is
+    // built as its own thing: another palette, its pages in another order.
+    const variantOf = product.variant_of || null;
     const spec = raw
-      ? normaliseSpec(raw, idea, config.shopName)
-      : offlineSpec(idea, config.shopName);
+      ? normaliseSpec(raw, { ...idea, variantOf }, config.shopName)
+      : offlineSpec({ ...idea, variantOf }, config.shopName);
+    if (variantOf) {
+      this.say(`${product.sku} is close to "${variantOf}", so I have built it differently.`, {
+        kind: 'variant',
+        discord: false,
+      });
+    }
 
     const built = buildProduct(product, spec);
     const price = product.price || suggestPrice(idea, built.pageCount);

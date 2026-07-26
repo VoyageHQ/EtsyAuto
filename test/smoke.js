@@ -492,6 +492,38 @@ console.log('\nThe first sixty characters of a title');
   );
 }
 
+console.log('\nDuplicates are kept, and built differently');
+{
+  // Dropping near-duplicates emptied the bench: the catalogue only grows, so
+  // eventually everything the Scout thinks of resembles something already
+  // there. They come through marked instead, and the owner decides.
+  const base = offlineSpec(
+    { id: 'v-base', title: 'Monthly Budget Planner', category: 'Budget planners', pitch: 'p', audience: 'a' },
+    'Hartistic'
+  );
+  const variant = offlineSpec(
+    { id: 'v-two', title: 'Monthly Budget Planner', category: 'Budget planners', pitch: 'p', audience: 'a', variantOf: 'Monthly Budget Planner' },
+    'Hartistic'
+  );
+  check('a variant wears a different palette', base.palette !== variant.palette, `${base.palette} vs ${variant.palette}`);
+  check(
+    '   and lays its pages out differently',
+    JSON.stringify(base.pages.map((p) => p.title)) !== JSON.stringify(variant.pages.map((p) => p.title))
+  );
+  check('   while still being a proper pack', variant.pages.length >= 3, `${variant.pages.length} pages`);
+  check('   and its cover stays first', variant.pages[0].kind === 'cover');
+
+  // Rebuilding must give the same product back, not a third one.
+  const again = offlineSpec(
+    { id: 'v-two', title: 'Monthly Budget Planner', category: 'Budget planners', pitch: 'p', audience: 'a', variantOf: 'Monthly Budget Planner' },
+    'Hartistic'
+  );
+  check(
+    'rebuilding a variant produces the same product, not a new one',
+    JSON.stringify(again.pages.map((p) => p.title)) === JSON.stringify(variant.pages.map((p) => p.title))
+  );
+}
+
 console.log('\nThe rail on deleting listings');
 {
   // Re-drafting deletes things on somebody's real shop, so the rule that only

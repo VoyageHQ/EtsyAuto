@@ -400,6 +400,12 @@ function ideasPanel(state, ctx) {
             effort ${idea.effort}/5 · demand ${idea.demand}/5 ·
             ${money(idea.priceLow, currency)}–${money(idea.priceHigh, currency)}</p>
           <p class="idea-pitch">${esc(idea.pitch || '')}</p>
+          ${
+            idea.similarTo
+              ? `<p class="idea-meta" style="color:var(--amber)">Close to "${esc(idea.similarTo)}" —
+                 approve it and the Maker builds it differently: another palette, another set of pages.</p>`
+              : ''
+          }
           <div class="tagline">${(idea.keywords || [])
             .slice(0, 6)
             .map((k) => `<span class="tag">${esc(k)}</span>`)

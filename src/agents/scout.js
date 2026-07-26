@@ -82,6 +82,8 @@ only if it is unusually uncontested.`,
         status: 'proposed',
         source_agent: this.id,
         batch,
+        similar_to: idea.similarTo ?? null,
+        similarity: idea.similarity ?? null,
         created_at: now(),
       });
     }
@@ -221,11 +223,20 @@ Return a JSON array. Each element:
       const title = truncate(String(item?.title || '').trim(), 90);
       if (!title || seen.has(title.toLowerCase())) continue;
 
+      // A near-duplicate is kept, not binned.
+      //
+      // Dropping them looked sensible and was the reason the bench eventually
+      // went empty: the catalogue only grows, so after a while everything the
+      // Scout thinks of resembles something already there and nothing survives
+      // the filter. It also decided something that is the owner's to decide —
+      // a second budget planner for a different buyer is a real product, and
+      // the shops that do well have several.
+      //
+      // So it comes through marked with what it is close to. The Research
+      // Bench shows that, and if the owner approves it anyway the Maker builds
+      // it deliberately differently rather than producing the same pages twice.
       const near = closestMatch(`${title} ${(item.keywords || []).join(' ')}`, known);
-      if (near.match && near.score >= TOO_SIMILAR) {
-        skipped.push(`${title} (too close to "${near.match.title}")`);
-        continue;
-      }
+      const similarTo = near.match && near.score >= TOO_SIMILAR ? near.match : null;
 
       // Things the shop has learned not to bother with, enforced whether or
       // not a model was involved in proposing this.
@@ -243,6 +254,9 @@ Return a JSON array. Each element:
       seen.add(title.toLowerCase());
       known.push({ kind: 'idea', title, bag: tokens(`${title} ${(item.keywords || []).join(' ')}`) });
       const effort = clampInt(item.effort, 1, 5, 3);
+      const similarFields = similarTo
+        ? { similarTo: similarTo.title, similarity: Number(near.score.toFixed(2)) }
+        : {};
       const demand = clampInt(item.demand, 1, 5, 3);
       const priceLow = Number(item.priceLow) > 0 ? Number(item.priceLow) : 3;
       const priceHigh = Number(item.priceHigh) > priceLow ? Number(item.priceHigh) : priceLow + 3;
@@ -261,14 +275,25 @@ Return a JSON array. Each element:
         priceLow,
         priceHigh,
         score: score({ effort, demand, priceLow, priceHigh }),
+        ...similarFields,
       });
     }
 
+    // Only real refusals are reported now — trademarks and things the shop has
+    // learned never sell. Near-duplicates go on the bench with a note.
     if (skipped.length) {
-      this.say(`Dropped ${skipped.length} near-duplicate(s): ${skipped.slice(0, 3).join('; ')}.`, {
+      this.say(`Left out ${skipped.length}: ${skipped.slice(0, 3).join('; ')}.`, {
         kind: 'dupes',
         discord: false,
       });
+    }
+    const echoes = out.filter((idea) => idea.similarTo).length;
+    if (echoes) {
+      this.say(
+        `${echoes} of these are close to something the shop already has — marked so you can decide. ` +
+          'Approve one and the Maker will build it differently rather than repeat itself.',
+        { kind: 'dupes', discord: false }
+      );
     }
     return out.sort((a, b) => b.score - a.score);
   }

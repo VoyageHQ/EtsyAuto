@@ -263,6 +263,8 @@ function ideaRows(where, limit) {
     score: row.score,
     status: row.status,
     note: row.note,
+    similarTo: row.similar_to || null,
+    similarity: row.similarity || null,
     createdAt: row.created_at,
   }));
 }

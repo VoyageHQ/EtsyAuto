@@ -5,7 +5,7 @@ import { llm, OfflineError } from '../core/llm.js';
 import { lessonBlock } from '../core/memory.js';
 import { insightBlock } from '../core/insights.js';
 import { log, pushState } from '../core/events.js';
-import { setAgentState, one } from '../core/db.js';
+import { setAgentState, one, getSetting, setSetting } from '../core/db.js';
 import { stationById } from '../core/stations.js';
 
 const VENTURE_CONTEXT = `
@@ -154,15 +154,47 @@ export class Agent {
   }
 
   /** Convenience: try the model, fall back to local craft when it is absent. */
+  /**
+   * Ask the model, and fall back to built-in craft when it cannot answer.
+   *
+   * The fallback is silent by design — the shop must keep working with no model
+   * at all. But silence is wrong when a model *is* configured: "the brain is on
+   * and nothing is different" is impossible to diagnose from the outside, and
+   * a model that returns unparseable JSON fails exactly like one that is not
+   * there. So say so, once, when the two disagree.
+   */
   async thinkOr(fallback, options) {
     try {
       const result = await this.think(options);
-      if (result === null || result === undefined) return fallback();
+      if (result === null || result === undefined) {
+        this.noteFellBack('it did not answer in a usable shape');
+        return fallback();
+      }
       return result;
     } catch (err) {
-      if (err instanceof OfflineError || err.offline) return fallback();
+      if (err instanceof OfflineError || err.offline) {
+        this.noteFellBack(err.message || 'it was unavailable');
+        return fallback();
+      }
       throw err;
     }
+  }
+
+  /**
+   * Mention a fallback, but only when there was supposed to be a brain, and
+   * only occasionally — the loop runs every twenty seconds and a message each
+   * time would bury everything else in the feed.
+   */
+  noteFellBack(why) {
+    if (!llm.enabled) return;
+    const last = Number(getSetting(`fellback_${this.id}`, '0'));
+    if (Date.now() - last < 10 * 60 * 1000) return;
+    setSetting(`fellback_${this.id}`, String(Date.now()));
+    this.say(
+      `The brain is configured but I used my own craft for that: ${why}. ` +
+        'Run npm run brain:check if this keeps happening.',
+      { kind: 'brain', level: 'warn', discord: false }
+    );
   }
 
   /** Overridden by each agent. Returns { result, enqueue?, blocked? }. */

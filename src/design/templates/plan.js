@@ -705,23 +705,67 @@ function cover(idea, chips) {
  * @param {object} idea row from the ideas table
  * @param {string} brand
  */
+/**
+ * Make a variant look and read like its own product.
+ *
+ * A second budget planner for a different buyer is a real product — the shops
+ * that do well have several — but only if it is genuinely a different thing to
+ * own. Two identical page sets under two titles is the version that annoys a
+ * buyer who owns one and finds the other.
+ *
+ * So a variant gets a different palette, its pages in a different order after
+ * the cover, and a longer or shorter pack. Not random: seeded from what it is a
+ * variant of, so rebuilding it produces the same product rather than a new one
+ * each time.
+ */
+function vary(spec, variantOf) {
+  if (!variantOf) return spec;
+  const rng = seededRandom(String(variantOf));
+
+  // A different palette from the one its sibling wears.
+  const options = PALETTE_NAMES.filter((name) => name !== spec.palette);
+  const palette = options[Math.floor(rng() * options.length)] || spec.palette;
+
+  // Keep the cover first — it is the product's face — and reorder the rest, so
+  // the buyer meets the same material in a different shape.
+  const [cover, ...rest] = spec.pages;
+  const shuffled = rest
+    .map((page) => ({ page, at: rng() }))
+    .sort((a, b) => a.at - b.at)
+    .map((entry) => entry.page);
+
+  // Slightly different length, within what is still a proper pack.
+  const keep = Math.max(3, Math.min(shuffled.length, shuffled.length - (rng() < 0.5 ? 1 : 0)));
+
+  return {
+    ...spec,
+    palette,
+    pages: [cover, ...shuffled.slice(0, keep)],
+  };
+}
+
 export function offlineSpec(idea, brand) {
   const rng = seededRandom(idea.id || idea.title);
   const haystack = `${idea.title} ${idea.category} ${idea.audience || ''} ${(idea.keywords || []).join(' ')}`;
   const blueprint = BLUEPRINTS.find((b) => b.match.test(haystack));
   const built = blueprint ? blueprint.build(idea, rng) : DEFAULT_BLUEPRINT(idea);
-  return normaliseSpec(
-    {
-      title: idea.title,
-      subtitle: idea.pitch || '',
-      brand,
-      palette: built.palette || PALETTE_BY_CATEGORY[idea.category] || 'sage',
-      keywords: idea.keywords || [],
-      sheets: built.sheets || /spreadsheet|tracker|budget|inventory|log/i.test(haystack),
-      pages: built.pages,
-    },
-    idea,
-    brand
+  // A near-duplicate the owner approved anyway is built as its own product
+  // rather than the same pages under a new SKU.
+  return vary(
+    normaliseSpec(
+      {
+        title: idea.title,
+        subtitle: idea.pitch || '',
+        brand,
+        palette: built.palette || PALETTE_BY_CATEGORY[idea.category] || 'sage',
+        keywords: idea.keywords || [],
+        sheets: built.sheets || /spreadsheet|tracker|budget|inventory|log/i.test(haystack),
+        pages: built.pages,
+      },
+      idea,
+      brand
+    ),
+    idea.variantOf || idea.variant_of || idea.similar_to || null
   );
 }
 
