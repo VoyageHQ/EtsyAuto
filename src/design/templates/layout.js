@@ -237,7 +237,14 @@ function drawChecklist(page, spec, pageSpec, pal, startY) {
     ? pageSpec.sections
     : [{ title: '', items: pageSpec.items || [] }];
 
-  const twoCol = pageSpec.columnsCount === 2 || sections.length > 3;
+  // Two columns are a way of fitting more on the page, not a look. The flow
+  // below only moves into the second column when the first overflows, so
+  // asking for two and then not needing them left a narrow strip of content
+  // beside half a page of nothing. Measure first, and stay full width when it
+  // all fits — an empty right half reads as a mistake on something sold.
+  const totalHeight = sections.reduce((sum, s) => sum + 26 + (s.items?.length || 0) * 17 + 12, 0);
+  const fitsInOne = startY + totalHeight <= f.bottom - 30;
+  const twoCol = !fitsInOne && (pageSpec.columnsCount === 2 || sections.length > 3);
   const colW = twoCol ? (f.w - 22) / 2 : f.w;
   let col = 0;
   let y = startY;
@@ -287,6 +294,31 @@ function drawChecklist(page, spec, pageSpec, pal, startY) {
       y += 17;
     }
     y += 14;
+  }
+
+  // Anything left over becomes room to write in. A checklist that stops
+  // two-thirds down the page looks unfinished on something that was paid for,
+  // and the shop's own knowledge says every printable needs somewhere the
+  // buyer can add their own — their house is not the one in the example.
+  const noteHeight = pageSpec.note ? 46 : 10;
+  const spare = f.bottom - noteHeight - y;
+  const rows = Math.floor((spare - 26) / 17);
+  if (!twoCol && rows >= 3) {
+    page.rect(f.x, y - 11, colW, 19, { fill: pal.soft });
+    page.rect(f.x, y - 11, 2.5, 19, { fill: pal.accent });
+    page.text(f.x + 9, y + 2, (pageSpec.ownLabel || 'YOUR OWN').toUpperCase(), {
+      size: 8.5,
+      font: FONTS.bold,
+      fill: pal.ink,
+      tracking: 0.9,
+    });
+    y += 20;
+    for (let i = 0; i < rows; i++) {
+      page.rect(f.x + 2, y - 7.5, 9.5, 9.5, { stroke: pal.rule, lw: 0.85, r: 1.5 });
+      page.line(f.x + 19, y + 1.5, f.x + colW, y + 1.5, { stroke: pal.rule, lw: 0.6 });
+      y += 17;
+    }
+    y += 6;
   }
 
   if (pageSpec.note) drawNote(page, pal, f, Math.min(y + 6, f.bottom - 46), pageSpec.note);

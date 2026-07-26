@@ -26,6 +26,109 @@ const PRINT_NOTE =
 /** @type {{match: RegExp, build: (idea: any, rng: () => number) => object}[]} */
 const BLUEPRINTS = [
   {
+    // Before the money blueprint, deliberately. "Christmas Budget & Gift
+    // Planner" contains "budget", so the generic money pack claimed it and
+    // shipped bills and direct debits to somebody who was promised a gift
+    // list. A product that does not contain what its title says is a refund,
+    // however good the pages are.
+    match: /christmas|gift|holiday season|advent|festive|secret santa|birthday/i,
+    build: (idea) => ({
+      pages: [
+        cover(idea, ['Undated', 'A4 + Letter', 'Print at home']),
+        {
+          kind: 'table',
+          title: 'The gift list',
+          subtitle: 'Everyone you are buying for, what you decided, and what it cost.',
+          columns: [
+            { label: 'Who', weight: 1.6 },
+            { label: 'Idea', weight: 2.2 },
+            { label: 'Budget', weight: 1 },
+            { label: 'Spent', weight: 1 },
+            { label: 'Bought', weight: 0.7 },
+          ],
+          rows: 22,
+          checkboxColumn: true,
+          totals: 'Total spent',
+          note: 'Fill in Budget when you decide, Spent when you buy. The gap between them is the whole point.',
+        },
+        {
+          kind: 'table',
+          title: 'What it all costs',
+          subtitle: 'The parts of the season that are not presents.',
+          columns: [
+            { label: 'Cost', weight: 2.4 },
+            { label: 'Planned', weight: 1 },
+            { label: 'Actual', weight: 1 },
+          ],
+          rows: 16,
+          totals: 'Total for the season',
+          note: 'Food, drink, travel, cards, postage, decorations, the work do. This is the bit that surprises people.',
+        },
+        {
+          kind: 'checklist',
+          title: 'The run-up',
+          subtitle: 'Spread across the weeks so December is not one long panic.',
+          eyebrow: 'Week by week',
+          columnsCount: 2,
+          sections: [
+            {
+              title: 'Early — while there is still time',
+              items: [
+                'Write the full list of who you are buying for',
+                'Set a budget per person and add it up',
+                'Order anything coming from abroad',
+                'Check last posting dates and write them down',
+                'Buy cards and stamps',
+              ],
+            },
+            {
+              title: 'The middle stretch',
+              items: [
+                'Buy the gifts that need thought',
+                'Write and post the cards',
+                'Plan the food shop and what can be frozen',
+                'Sort wrapping paper, tape and tags',
+                'Book anything that needs booking',
+              ],
+            },
+            {
+              title: 'The last fortnight',
+              items: [
+                'Wrap in batches rather than all at once',
+                'Do the big food shop',
+                'Confirm who is coming and when',
+                'Charge the batteries nobody remembers',
+                'Put a bag by the door for the recycling',
+              ],
+            },
+          ],
+          note: 'Tick as you go. Anything not ticked by the last section is a thing to drop, not to panic about.',
+        },
+        {
+          kind: 'columns',
+          title: 'Notes for next year',
+          subtitle: 'Written now, while you still remember.',
+          blocks: [
+            { title: 'What cost more than expected', prompt: 'Be specific. "Presents" is not a reason.', lines: 14 },
+            { title: 'What to do earlier next time', prompt: 'One thing. Not five.', lines: 14 },
+          ],
+        },
+        {
+          kind: 'instructions',
+          title: 'How to use this',
+          body: [
+            'Start with the gift list. Write everyone down before you write a single budget — seeing the whole list is what stops the total running away.',
+            'Set a budget per person, then add it up. If the total frightens you, change it now rather than in January.',
+            'Fill in Spent as you buy. The gap between Budget and Spent is the only number that matters.',
+            'Keep the running costs page open alongside. Presents are rarely where the money actually goes.',
+          ],
+        },
+      ],
+      sheets: true,
+      palette: 'clay',
+    }),
+  },
+  {
     match: /budget|bill|debt|saving|sinking|money|expense|paycheck/i,
     build: (idea) => ({
       pages: [

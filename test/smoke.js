@@ -30,6 +30,8 @@ import { recordFailures, failureSummary } from '../src/core/retro.js';
 import { record, todayUsage, usageByAgent, overBudget } from '../src/core/spend.js';
 import { uid } from '../src/core/util.js';
 import { auditListing, buildTitle, buildTags } from '../src/etsy/seo.js';
+import { SEEDS } from '../src/agents/ideas-corpus.js';
+import { offlineSpec } from '../src/design/templates/plan.js';
 import { avatarFor } from '../src/discord/avatars.js';
 import { loadKnowledge, packSummary } from '../src/knowledge/index.js';
 import { writeBackup, readBackup } from '../src/core/backup.js';
@@ -53,6 +55,8 @@ import {
   findHardKills,
   overCollectingFields,
   findPhrases,
+  findShopFacingCopy,
+  unkeptTitlePromises,
 } from '../src/knowledge/apply.js';
 
 let failures = 0;
@@ -480,6 +484,37 @@ console.log('\nThe first sixty characters of a title');
     'titles stay inside what Etsy accepts',
     buildTitle({ name: 'A'.repeat(120), keyword: 'x', audience: 'y' }).length <= 140
   );
+}
+
+console.log('\nSaying it to the buyer, not to the shop');
+{
+  // The Scout's reasoning is written for the valley. Printed in a listing it
+  // tells a shopper the product's shape was chosen for the seller's benefit.
+  check('shop reasoning in buyer copy is caught', findShopFacingCopy('sets of three sell better than singles').length >= 1);
+  check('   and seasonality reasoning too', findShopFacingCopy('January and September spikes').length >= 1);
+  check('   while a real benefit passes', findShopFacingCopy('twelve weeks on one page, so you can see the whole block') .length === 0);
+  check(
+    'no seed in the corpus talks to the shop instead of the buyer',
+    SEEDS.every((seed) => findShopFacingCopy(seed.g).length === 0),
+    SEEDS.filter((seed) => findShopFacingCopy(seed.g).length).map((s) => s.t).join(', ')
+  );
+
+  // A product that is not what its title says is a refund, not a lost sale.
+  check(
+    'a product that does not contain what the title promises is caught',
+    unkeptTitlePromises('Christmas Gift Wrapping Planner', [{ title: 'Monthly overview' }, { title: 'Bills' }]).length >= 2
+  );
+  check(
+    '   but one stray word is left alone',
+    unkeptTitlePromises('Zesty Budget Planner', [{ title: 'Monthly budget overview' }]).length === 0
+  );
+  const gift = offlineSpec({ title: 'Christmas Budget & Gift Planner', category: 'Budget planners', pitch: 'x', audience: 'y' }, 'H');
+  check(
+    'a gift planner is built with a gift list, not direct debits',
+    gift.pages.some((p) => /gift list/i.test(p.title || '')),
+    gift.pages.map((p) => p.title).join(' / ')
+  );
+  check('   and it keeps its promises', unkeptTitlePromises('Christmas Budget & Gift Planner', gift.pages).length === 0);
 }
 
 console.log('\nTags a person would actually type');

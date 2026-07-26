@@ -22,6 +22,8 @@ import {
   findOverreachingLicence,
   licenceTermsStated,
   imageProblems,
+  findShopFacingCopy,
+  unkeptTitlePromises,
 } from '../knowledge/apply.js';
 import { money } from '../core/util.js';
 
@@ -160,6 +162,28 @@ You would rather send something back than let it out half done.`,
       problems.push(
         `Medical claim: "${medical.join('", "')}". Supportive is fine, therapeutic is regulated — ` +
           'say what the product helps someone do, never what it treats.'
+      );
+    }
+
+    // The Scout's reasoning is written for the shop, not the shopper. "Sets of
+    // three sell better than singles" is a good reason to make something and a
+    // strange thing to tell the person buying it.
+    const shopFacing = findShopFacingCopy(listing?.description || '');
+    if (shopFacing.length) {
+      problems.push(
+        `The description talks about why this sells rather than why to buy it: "${shopFacing.join('", "')}". ` +
+          'That reasoning is for the valley, not the buyer.'
+      );
+    }
+
+    // The most expensive mistake this shop can make is shipping something that
+    // is not what the title said. That is a refund and a review, not a lost
+    // sale, and no amount of quality on the pages fixes it.
+    const unkept = unkeptTitlePromises(listing?.title || product.title, product.spec?.pages || []);
+    if (unkept.length) {
+      notes.push(
+        `The title says "${unkept.join('", "')}" but no page mentions any of it. ` +
+          'Check the buyer is getting the product the title describes.'
       );
     }
 

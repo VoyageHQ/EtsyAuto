@@ -326,3 +326,85 @@ export function overCollectingFields(fields = []) {
   const never = (data.neverCollect || []).map(lower);
   return fields.filter((field) => never.some((n) => lower(field).includes(n)));
 }
+
+// --- keeping the shop's reasoning out of the buyer's listing ---------------
+
+/**
+ * Language that is about the shop's commercial reasoning rather than about
+ * the buyer.
+ *
+ * "Sets of three sell better than singles" is a true and useful thing for the
+ * Scout to know. Printed in a listing under "why this one and not a free
+ * scribble", it tells a shopper that the product's shape was chosen for the
+ * seller's benefit — which is both odd to read and the opposite of what the
+ * sentence is there to do. The same goes for seasonality, margin and search
+ * volume: real reasons to make a thing, never reasons to buy one.
+ */
+const SHOP_FACING_PHRASES = [
+  'sell better',
+  'sells better',
+  'sells well',
+  'pure margin',
+  'high margin',
+  'good margin',
+  'panic buying',
+  'spikes',
+  'evergreen between',
+  'search volume',
+  'low competition',
+  'saturated',
+  'untapped',
+  'easy money',
+  'quick win',
+  'repeat purchase',
+  'upsell',
+  'conversion rate',
+  'profit margin',
+];
+
+export const findShopFacingCopy = (text) => findPhrases(text, SHOP_FACING_PHRASES);
+
+/**
+ * Words the title promises that no page delivers.
+ *
+ * A "Christmas Budget & Gift Planner" whose pages are Monthly Overview, Bills
+ * & Direct Debits and Savings Progress is not a bad planner — it is the wrong
+ * one, and the buyer finds out after paying. That is the most expensive kind
+ * of mistake this shop can make, because it is a refund and a review rather
+ * than a lost sale.
+ *
+ * Deliberately forgiving. Only the distinctive words count: format words
+ * ("printable", "pdf") and generic product words ("planner", "tracker") say
+ * nothing about contents, and a single unmatched word is usually style rather
+ * than a broken promise. It reports, it does not reject.
+ *
+ * @param {string} title
+ * @param {{title?: string, subtitle?: string}[]} pages
+ * @returns {string[]} distinctive title words that appear nowhere in the pages
+ */
+const CONTENT_NEUTRAL_WORDS = new Set([
+  'printable', 'print', 'pdf', 'digital', 'download', 'instant', 'letter', 'undated',
+  'planner', 'tracker', 'chart', 'sheet', 'sheets', 'pack', 'set', 'kit', 'bundle',
+  'template', 'templates', 'log', 'journal', 'book', 'workbook', 'organiser', 'organizer',
+  'daily', 'weekly', 'monthly', 'yearly', 'page', 'pages', 'edition', 'version',
+]);
+
+export function unkeptTitlePromises(title, pages = []) {
+  const delivered = lower(
+    pages.map((p) => `${p.title || ''} ${p.subtitle || ''} ${p.note || ''}`).join(' ')
+  );
+  if (!delivered.trim()) return [];
+
+  const words = [
+    ...new Set(
+      lower(title)
+        .split(/[^a-z0-9]+/)
+        .filter((word) => word.length > 3 && !CONTENT_NEUTRAL_WORDS.has(word))
+    ),
+  ];
+
+  const missing = words.filter((word) => !delivered.includes(word));
+  // One stray word is a turn of phrase; several means the product is not the
+  // thing the title describes.
+  return missing.length >= 2 ? missing : [];
+}

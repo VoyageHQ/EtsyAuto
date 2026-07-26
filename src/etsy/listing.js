@@ -120,14 +120,21 @@ function assembleDescription(body, { idea, spec, pageCount, price }) {
 
 function offlineDescription({ idea, spec, pageCount, price, keywords }) {
   const hook = idea.pitch || `${idea.title} for ${idea.audience}.`;
-  const why = idea.angle ? `Why this one and not a free scribble: ${idea.angle}` : '';
+
+  // The Scout writes its pitch as "<title> for <audience> — <angle>", so the
+  // angle is usually already in the hook. Printing it again two lines later
+  // reads as a stutter, and those opening lines are what Google shows as the
+  // snippet — the most-read text the listing has.
+  const angle = String(idea.angle || '').trim();
+  const alreadySaid = angle && hook.toLowerCase().includes(angle.toLowerCase());
+  const why = angle && !alreadySaid ? `Why this one and not a free scribble: ${angle}` : '';
 
   return [
     `${idea.title}`,
     '',
     hook,
     '',
-    `Made for ${idea.audience}. ${why}`.trim(),
+    `Made for ${idea.audience}.${why ? ` ${why}` : ''}`.trim(),
     '',
     SECTION_RULE,
     '',
