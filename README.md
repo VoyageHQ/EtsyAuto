@@ -172,6 +172,29 @@ npm run digest              # the same thing in a terminal
 npm run digest -- --keep    # read it without marking it caught up
 ```
 
+## Keeping a copy
+
+`data/valley.db` is gitignored, which is right — it is your shop, not this
+project — and it also means it never leaves the machine it was made on. Every
+lesson you taught, every reason you gave for turning an idea down, and every
+sale you recorded lives only there.
+
+```bash
+npm run backup                          # backups/valley-<date>.json
+npm run backup -- ~/Dropbox/hv.json     # or wherever you keep things
+npm run restore -- ~/Dropbox/hv.json
+```
+
+Restore **merges by id and never deletes**, so it is safe to run against a shop
+that has carried on since the backup was taken. Rows already present are left
+alone unless you pass `--overwrite`, and `--dry-run` tells you what would
+happen without touching anything.
+
+It carries the file list too, so a lost database on a machine whose `out/`
+folder is still there comes back complete. Move to a new machine without
+bringing `out/` and it tells you how many files are missing, so you can copy
+them across or press *rebuild*.
+
 There is a fourth rail on your wallet. Set `LLM_DAILY_TOKENS` and when the day's
 budget is spent the agents fall back to their offline craft rather than
 spending more — the shop keeps running, it just gets less inventive until

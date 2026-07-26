@@ -2,10 +2,10 @@
 //
 //   npm test
 //
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import config from '../src/core/config.js';
-import { all, count, one, insert, update } from '../src/core/db.js';
+import { all, count, one, insert, update, run } from '../src/core/db.js';
 import { agentList, agentsIn } from '../src/agents/registry.js';
 import { STATION_IDS, WORLDS } from '../src/core/stations.js';
 import {
@@ -32,6 +32,7 @@ import { uid } from '../src/core/util.js';
 import { auditListing } from '../src/etsy/seo.js';
 import { avatarFor } from '../src/discord/avatars.js';
 import { loadKnowledge, packSummary } from '../src/knowledge/index.js';
+import { writeBackup, readBackup } from '../src/core/backup.js';
 import {
   findTrademarks,
   findBannedPhrases,
@@ -452,6 +453,49 @@ console.log('\nWhat the agents have been taught');
   loadKnowledge();
   check('a lesson you deleted is not silently reinstated', !lessonsFor('scout', 'etsy').some((l) => l.id === victim.id));
   check('and can be brought back deliberately', loadKnowledge({ restoreDeleted: true }).added >= 1);
+}
+
+console.log('\nBacking up what exists nowhere else');
+{
+  const dir = join(config.root, 'data');
+  const path = join(dir, 'smoke-backup.json');
+  const written = writeBackup(path);
+  check('a backup writes every table worth keeping', written.rows > 0, `${written.rows} rows`);
+  check('   including the lessons you taught', (written.counts.lessons ?? 0) > 0);
+  check('   and the decisions you made', (written.counts.ideas ?? 0) > 0);
+  check('   and it says where it went', existsSync(written.path));
+
+  // A restore into a shop that already has these rows must be a no-op, or
+  // running it twice would duplicate the owner's whole history.
+  const again = readBackup(path);
+  check('restoring what is already here changes nothing', again.total === 0, `${again.total} rows touched`);
+  check('   and says so rather than silently doing nothing', Object.keys(again.skipped).length > 0);
+
+  const dry = readBackup(path, { dryRun: true });
+  check('a dry run reports without touching anything', dry.dryRun === true);
+
+  // The thing this feature exists for: losing a row and getting it back.
+  const victim = one("SELECT * FROM lessons WHERE source = 'test' LIMIT 1");
+  if (victim) {
+    run('DELETE FROM lessons WHERE id = ?', victim.id);
+    check('a lesson can genuinely be lost', !one('SELECT id FROM lessons WHERE id = ?', victim.id));
+    const back = readBackup(path);
+    check('   and the backup brings it back', Boolean(one('SELECT id FROM lessons WHERE id = ?', victim.id)));
+    check('   restoring only what was missing', back.total === 1, `${back.total} rows`);
+  }
+
+  check('a file that is not a backup is refused clearly', (() => {
+    writeFileSync(join(dir, 'not-a-backup.json'), '{"hello":"world"}');
+    try {
+      readBackup(join(dir, 'not-a-backup.json'));
+      return false;
+    } catch (err) {
+      return /not a valley backup/i.test(err.message);
+    }
+  })());
+
+  rmSync(path, { force: true });
+  rmSync(join(dir, 'not-a-backup.json'), { force: true });
 }
 
 console.log('\nKnowledge that works without a model');

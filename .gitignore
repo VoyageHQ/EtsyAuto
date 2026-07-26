@@ -26,3 +26,7 @@ ventures/**
 
 # claude code local settings
 .claude/settings.local.json
+
+# backups you take of your own shop
+backups/
+*.backup.json

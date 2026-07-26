@@ -27,7 +27,9 @@
     "audit:ui": "node --disable-warning=ExperimentalWarning test/ui-audit.mjs",
     "check": "npm test && npm run audit && npm run audit:ui",
     "knowledge": "node --disable-warning=ExperimentalWarning src/cli.js knowledge",
-    "digest": "node --disable-warning=ExperimentalWarning src/cli.js digest"
+    "digest": "node --disable-warning=ExperimentalWarning src/cli.js digest",
+    "backup": "node --disable-warning=ExperimentalWarning src/cli.js backup",
+    "restore": "node --disable-warning=ExperimentalWarning src/cli.js restore"
   },
   "dependencies": {},
   "devDependencies": {}

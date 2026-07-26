@@ -16,6 +16,7 @@ import { openApprovals, answer } from './core/approvals.js';
 import { listProducts } from './pipeline/products.js';
 import { money } from './core/util.js';
 import { buildDigest, renderDigest, markSeen } from './core/digest.js';
+import { writeBackup, readBackup } from './core/backup.js';
 
 const [command, ...rest] = process.argv.slice(2);
 const bold = (s) => `\x1b[1m${s}\x1b[0m`;
@@ -34,6 +35,58 @@ const commands = {
     console.log('\n' + renderDigest(d) + '\n');
     if (!rest.includes('--keep')) markSeen();
     else console.log(dim('  (left unread — drop --keep to mark it caught up)\n'));
+  },
+
+  /**
+   * Write everything that exists nowhere else to a file you can keep.
+   *
+   *   npm run backup
+   *   npm run backup -- ~/Dropbox/hartistic.json
+   */
+  backup() {
+    const result = writeBackup(rest[0] || null);
+    console.log(`\n  ${bold(String(result.rows))} rows written to ${result.path}\n`);
+    for (const [table, n] of Object.entries(result.counts)) {
+      if (n) console.log(`  ${table.padEnd(18)} ${dim(String(n))}`);
+    }
+    console.log(dim('\n  data/valley.db is gitignored, so this file is the only copy off this machine.\n'));
+  },
+
+  /**
+   * Read one back in. Merges by id and never deletes, so this is safe to run
+   * against a shop that has carried on since the backup was taken.
+   *
+   *   npm run restore -- ~/Dropbox/hartistic.json
+   *   npm run restore -- backup.json --dry-run
+   *   npm run restore -- backup.json --overwrite
+   */
+  restore() {
+    const path = rest.find((a) => !a.startsWith('--'));
+    if (!path) {
+      console.log('\n  Which file? npm run restore -- path/to/backup.json\n');
+      process.exitCode = 1;
+      return;
+    }
+    const report = readBackup(path, {
+      overwrite: rest.includes('--overwrite'),
+      dryRun: rest.includes('--dry-run'),
+    });
+    console.log(`\n  ${bold(String(report.total))} row(s)${report.dryRun ? ' would be' : ''} restored from ${path}\n`);
+    for (const table of new Set([...Object.keys(report.added), ...Object.keys(report.replaced), ...Object.keys(report.skipped)])) {
+      const bits = [];
+      if (report.added[table]) bits.push(`${report.added[table]} new`);
+      if (report.replaced[table]) bits.push(`${report.replaced[table]} replaced`);
+      if (report.skipped[table]) bits.push(dim(`${report.skipped[table]} already here`));
+      console.log(`  ${table.padEnd(18)} ${bits.join(', ')}`);
+    }
+    if (report.missingFiles) {
+      console.log(
+        `\n  ${report.missingFiles} file(s) referred to by this backup are not on disk. ` +
+          'Copy out/ across from the other machine, or press rebuild in the Workshop.'
+      );
+    }
+    if (!report.dryRun) console.log(dim('\n  Nothing was deleted. Rows already here were left alone unless you passed --overwrite.\n'));
+    else console.log(dim('\n  Nothing was changed. Drop --dry-run to do it for real.\n'));
   },
 
   async ideas() {
@@ -219,6 +272,9 @@ ${bold(config.valleyName)}
   npm run teach -- <agent> <rule>  correct an agent for good
   npm run list                     every product and where it is up to
   npm run knowledge [-- <agent>]   what the packs have taught everyone
+  npm run digest                   what changed while you were away
+  npm run backup [-- <path>]       everything that exists nowhere else
+  npm run restore -- <path>        read a backup back in (merges, never deletes)
   node scripts/discord-setup.js    the Discord walkthrough
   node scripts/etsy-auth.js        get your Etsy access token
 `);
@@ -226,5 +282,12 @@ ${bold(config.valleyName)}
 };
 
 const run = commands[command] || commands.help;
-await run();
+try {
+  await run();
+} catch (err) {
+  // A wrong path or a file that turns out not to be a backup is an ordinary
+  // mistake at a prompt, not a crash. Print what went wrong and stop.
+  console.error(`\n  ${err.message}\n`);
+  process.exit(1);
+}
 process.exit(0);
