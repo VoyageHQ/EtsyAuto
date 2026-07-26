@@ -17,6 +17,16 @@ export const LIMITS = {
 
 const STOPWORDS = new Set(['the', 'a', 'an', 'and', 'or', 'for', 'with', 'of', 'to', 'in', 'my', 'your']);
 
+/**
+ * Adjectives that mean the phrase had not finished yet. Cutting an audience
+ * after one of these leaves a fragment ("renters new", "parents busy") rather
+ * than something a buyer would type.
+ */
+const DANGLING_ADJECTIVES = new Set([
+  'new', 'old', 'busy', 'young', 'small', 'big', 'first', 'early', 'late',
+  'tired', 'overwhelmed', 'serious', 'keen', 'fussy', 'newly',
+]);
+
 /** Words Etsy shoppers actually type, appended when there is room. */
 const UNIVERSAL = [
   'printable',
@@ -80,20 +90,32 @@ export function buildTags(keywords = [], context = {}) {
 /**
  * Honest extra tags built from what the product is actually called — pairs of
  * neighbouring words, then single words qualified by format.
+ *
+ * Pairs are only ever taken from *within* one segment of the title. A title
+ * reads "Habit Tracker Bundle | Water Planner | Printable PDF", and treating
+ * that as one run of words produces "bundle water" and "planner printable" —
+ * phrases nobody has ever typed into Etsy, each one burning a tag out of only
+ * thirteen. Separators are where meaning stops, so the pairing stops there too.
  */
 function phrasesFromTitle(title) {
-  const words = String(title || '')
+  const segments = String(title || '')
     .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .split(/\s+/)
-    .filter((word) => word.length > 2 && !STOPWORDS.has(word));
-  if (!words.length) return [];
+    .split(/[|+&,/]|\s-\s/)
+    .map((segment) =>
+      segment
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter((word) => word.length > 2 && !STOPWORDS.has(word))
+    )
+    .filter((words) => words.length);
 
   const phrases = [];
-  for (let i = 0; i < words.length - 1; i++) {
-    phrases.push(`${words[i]} ${words[i + 1]}`);
+  for (const words of segments) {
+    for (let i = 0; i < words.length - 1; i++) {
+      phrases.push(`${words[i]} ${words[i + 1]}`);
+    }
   }
-  for (const word of words) {
+  for (const word of segments.flat()) {
     for (const qualifier of ['printable', 'template', 'planner pdf']) {
       if (word === qualifier) continue;
       phrases.push(`${word} ${qualifier}`);
@@ -102,12 +124,32 @@ function phrasesFromTitle(title) {
   return phrases;
 }
 
+/**
+ * An audience, cut down to something a person would actually type.
+ *
+ * The Scout writes audiences as descriptions — "spring cleaners and
+ * end-of-tenancy movers", "parents of 11-16 year olds" — and taking the first
+ * three words of those gives "spring cleaners end-of-tenancy" and "parents
+ * 11-16 year". Both are fragments, and both went straight into titles and tags.
+ *
+ * Cutting at the first connective instead lands on a whole idea, because that
+ * is where English joins two of them.
+ */
 function shortAudience(audience) {
-  const words = String(audience)
+  const firstIdea = String(audience)
     .toLowerCase()
+    .split(/\s+(?:and|or|plus|of|who|for|with|to)\s+|[,;/&]/)[0]
     .split(/\s+/)
-    .filter((w) => !STOPWORDS.has(w));
-  return words.slice(0, 3).join(' ');
+    .filter((word) => word && !STOPWORDS.has(word));
+
+  // Two words is a phrase; three is usually a phrase with a tail on it.
+  const pair = firstIdea.slice(0, 2);
+
+  // "renters new to paying bills" cuts to "renters new", which is not a thing
+  // anyone types. An adjective on the end is the giveaway that the phrase was
+  // still going, so drop it and keep the noun that can stand alone.
+  if (pair.length === 2 && DANGLING_ADJECTIVES.has(pair[1])) pair.pop();
+  return pair.join(' ');
 }
 
 /**

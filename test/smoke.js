@@ -29,7 +29,7 @@ import { closestMatch, cannibalWarning, TOO_SIMILAR } from '../src/core/similari
 import { recordFailures, failureSummary } from '../src/core/retro.js';
 import { record, todayUsage, usageByAgent, overBudget } from '../src/core/spend.js';
 import { uid } from '../src/core/util.js';
-import { auditListing, buildTitle } from '../src/etsy/seo.js';
+import { auditListing, buildTitle, buildTags } from '../src/etsy/seo.js';
 import { avatarFor } from '../src/discord/avatars.js';
 import { loadKnowledge, packSummary } from '../src/knowledge/index.js';
 import { writeBackup, readBackup } from '../src/core/backup.js';
@@ -480,6 +480,30 @@ console.log('\nThe first sixty characters of a title');
     'titles stay inside what Etsy accepts',
     buildTitle({ name: 'A'.repeat(120), keyword: 'x', audience: 'y' }).length <= 140
   );
+}
+
+console.log('\nTags a person would actually type');
+{
+  // There are only thirteen tags. One that reads as word salad is not a weak
+  // tag, it is a missing one.
+  const crossed = buildTags([], { title: 'Habit Tracker Bundle | Water Planner | Printable PDF' });
+  check(
+    'pairs are not built across the title separators',
+    !crossed.includes('bundle water') && !crossed.includes('planner printable'),
+    crossed.join(' / ')
+  );
+  check('   while pairs within a segment survive', crossed.includes('habit tracker'), crossed.join(' / '));
+  check('every tag reads as a phrase, not a fragment', crossed.every((t) => t.trim().length >= 3));
+  check('   and none exceeds what Etsy accepts', crossed.every((t) => t.length <= 20));
+  check('   and there are no duplicates', new Set(crossed).size === crossed.length);
+
+  // The Scout writes audiences as descriptions. Cutting them by word count
+  // produced fragments that went straight into titles and tags.
+  const audience = (text) => buildTags([], { audience: text })[0];
+  check('an audience joined by "and" is cut at the join', audience('spring cleaners and end-of-tenancy movers') === 'spring cleaners');
+  check('   and one joined by "of" too', audience('parents of 11-16 year olds') === 'parents');
+  check('   leaving no dangling adjective', audience('renters new to paying bills') === 'renters');
+  check('   while a short audience is left alone', audience('habit builders') === 'habit builders');
 }
 
 console.log('\nNoticing what is quietly wrong');
