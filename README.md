@@ -148,7 +148,12 @@ windows come on.
   falling back to a built-in corpus of real product concepts and rule-based
   copywriting. Point `LLM_BASE_URL` at a local Ollama and it stays free while
   getting a lot more inventive. Anthropic and any OpenAI-compatible endpoint
-  are both supported — see `.env.example`.
+  are both supported — see `.env.example`. Nothing to install in this project
+  either way:
+
+  ```bash
+  npm run brain:check     # is it on, does it answer, can it return JSON
+  ```
 - **Storage** — Node's built-in SQLite, in `data/valley.db`.
 
 ## Nothing goes out without you

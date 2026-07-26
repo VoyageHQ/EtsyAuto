@@ -71,7 +71,7 @@ export const config = {
   llm: {
     provider: str('LLM_PROVIDER', 'offline').toLowerCase(),
     anthropicKey: str('ANTHROPIC_API_KEY'),
-    anthropicModel: str('ANTHROPIC_MODEL', 'claude-sonnet-4-5'),
+    anthropicModel: str('ANTHROPIC_MODEL', 'claude-sonnet-5'),
     baseUrl: str('LLM_BASE_URL'),
     model: str('LLM_MODEL'),
     apiKey: str('LLM_API_KEY'),
