@@ -8,6 +8,7 @@ import Copywriter from './copywriter.js';
 import QA from './qa.js';
 import Lister from './lister.js';
 import Curator from './curator.js';
+import Signwriter from './signwriter.js';
 import Harbourmaster from './harbourmaster.js';
 import Prospector from './prospector.js';
 import Analyst from './analyst.js';
@@ -25,6 +26,7 @@ const instances = [
   new QA(),
   new Lister(),
   new Curator(),
+  new Signwriter(),
   // The venture arm. Separate people, separate data, same dashboard.
   new Harbourmaster(),
   new Prospector(),

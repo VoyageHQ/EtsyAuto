@@ -35,6 +35,19 @@ edition, dyslexia-friendly edition, one-page edition, and so on.
 With a model it writes fresh ideas, is told what is already in the shop so it
 does not repeat itself, and gets a nudge about the time of year.
 
+## The Signwriter
+
+One job: making sure buyers can find the shop. Reads every listing's title,
+tags and description the way Etsy's search does, and the whole catalogue the
+way an owner should — looking for listings competing with each other and for
+searches nobody here is covering.
+
+It never rewrites a live listing itself. Changing one resets what Etsy has
+learned about it, so it says what to change and leaves the timing to you, and
+stays quiet about anything edited in the last four weeks.
+
+Lives at the **Signpost**. Sweeps every few hours, or press *check again*.
+
 ## The Manager
 
 Runs on every tick. It keeps your idea backlog topped up to

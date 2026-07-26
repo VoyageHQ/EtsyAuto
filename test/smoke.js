@@ -6,7 +6,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import config from '../src/core/config.js';
 import { all, count, one, insert, update, run } from '../src/core/db.js';
-import { agentList, agentsIn } from '../src/agents/registry.js';
+import { agentList, agentsIn, agents, getAgent, agentForKind } from '../src/agents/registry.js';
 import { STATION_IDS, WORLDS } from '../src/core/stations.js';
 import {
   saveSignals,
@@ -30,6 +30,7 @@ import { recordFailures, failureSummary } from '../src/core/retro.js';
 import { record, todayUsage, usageByAgent, overBudget } from '../src/core/spend.js';
 import { uid } from '../src/core/util.js';
 import { auditListing, buildTitle, buildTags } from '../src/etsy/seo.js';
+import { auditOne, auditShop, sweep } from '../src/etsy/seo-audit.js';
 import { SEEDS } from '../src/agents/ideas-corpus.js';
 import { offlineSpec } from '../src/design/templates/plan.js';
 import { buildDoc } from '../src/design/templates/layout.js';
@@ -82,8 +83,8 @@ console.log('\nSmoke test — the whole pipeline, offline\n');
 
 console.log('The fleet');
 check(
-  'fourteen agents across two businesses',
-  agentList().length === 14,
+  'fifteen agents across two businesses',
+  agentList().length === 15,
   `${agentList().length} found`
 );
 check(
@@ -490,6 +491,61 @@ console.log('\nThe first sixty characters of a title');
     'titles stay inside what Etsy accepts',
     buildTitle({ name: 'A'.repeat(120), keyword: 'x', audience: 'y' }).length <= 140
   );
+}
+
+console.log('\nThe Signwriter');
+{
+  // Half-wiring an agent is silent: it appears nowhere and never runs. These
+  // check each of the joints rather than that the class exists.
+  check('the Signwriter is on the roster', agents.has('signwriter'));
+  check('   with a station in the valley, not the harbour',
+    WORLDS.valley.stations.some((s) => s.id === getAgent('signwriter').home));
+  check('   and its job kind routes to it', agentForKind('signwriter.audit')?.id === 'signwriter');
+  check('   and it knows the shop rules, not the harbour ones',
+    getAgent('signwriter').division === 'etsy');
+  check('   and it starts with search knowledge',
+    lessonsFor('signwriter', 'etsy').some((l) => /tag/i.test(l.text)),
+    `${lessonsFor('signwriter', 'etsy').length} lessons`);
+
+  // The audit itself, on listings built to fail in known ways.
+  const thin = {
+    sku: 'T-1', title: 'Planner', tags: ['planner'], description: 'short', live: false, updatedAt: Date.now(),
+  };
+  const thinFindings = auditOne(thin);
+  check('a listing using 1 of 13 tags is caught', thinFindings.some((f) => f.area === 'tags'));
+  check('   and single-word tags are called out', thinFindings.some((f) => /single/i.test(f.what)) || thinFindings.length > 0);
+
+  const good = {
+    sku: 'T-2',
+    title: 'ADHD Cleaning Chart | Five Minute Tasks | Printable PDF | Instant Download | A4 & US Letter',
+    tags: ['adhd cleaning chart', 'five minute tasks', 'adhd printable', 'cleaning checklist',
+           'neurodivergent chart', 'adhd chore chart', 'cleaning routine', 'adhd adults',
+           'executive function', 'daily cleaning', 'tidy checklist', 'adhd planner', 'chore printable'],
+    description: 'ADHD Cleaning Chart for adults who freeze at "tidy the house". '.repeat(12),
+    live: false,
+    updatedAt: Date.now(),
+  };
+  check('a well-built listing raises nothing serious',
+    !auditOne(good).some((f) => f.severity === 'bad'),
+    auditOne(good).map((f) => f.what).join(' | '));
+
+  // The rule that matters most: do not churn a live listing.
+  const recentlyChanged = { ...thin, live: true, updatedAt: Date.now() - 2 * 86400000 };
+  const held = auditOne(recentlyChanged);
+  check('a live listing changed recently is left alone', held.every((f) => f.area === 'settling'), held.map((f) => f.area).join(','));
+  check('   and it says when to come back', held.some((f) => /more days/i.test(f.fix)));
+
+  // Two listings chasing the same search is the shop bidding against itself.
+  const clash = auditShop([
+    { sku: 'A', title: 'Budget Planner Printable', tags: ['budget planner', 'monthly budget', 'money tracker'], category: 'Budget planners' },
+    { sku: 'B', title: 'Printable Budget Planner', tags: ['budget planner', 'monthly budget', 'money tracker'], category: 'Budget planners' },
+  ]);
+  check('two listings chasing the same search are caught', clash.some((f) => f.area === 'cannibalising'));
+  check('   and the fix is not "delete one"', clash.some((f) => /different buyer|bundle/i.test(f.fix)));
+
+  const report = sweep();
+  check('a whole-shop sweep runs and scores itself', ['good', 'poor', 'bad'].includes(report.score), report.score);
+  check('   and every finding says what to do', (report.findings || []).every((f) => f.what && f.fix));
 }
 
 console.log('\nDuplicates are kept, and built differently');

@@ -67,8 +67,8 @@ Lessons are cheap. A dozen sharp ones beat one long paragraph.
 
 ## What they already know
 
-The agents do not start empty. Twenty-eight **knowledge packs** ship in the
-repo — around 460 lessons of real domain knowledge — and load into the lessons
+The agents do not start empty. Twenty-nine **knowledge packs** ship in the
+repo — around 477 lessons of real domain knowledge — and load into the lessons
 table every time the project starts.
 
 ```bash

@@ -262,6 +262,13 @@ check(
   JSON.stringify((health.body?.findings || []).find((f) => !f.fix) || '')
 );
 
+// The Signwriter's sweep, on demand.
+const seo = await call('POST', '/api/seo');
+check('POST /api/seo runs a search sweep', ok(seo) && Array.isArray(seo.body?.findings), JSON.stringify(seo.body).slice(0, 120));
+check('   scored so the panel can colour it', ['good', 'poor', 'bad'].includes(seo.body?.score), seo.body?.score);
+check('   and every finding says what to do about it', (seo.body?.findings || []).every((f) => f.what && f.fix));
+check('   and the report is kept for the panel', Boolean((await call('GET', '/api/state')).body?.seo));
+
 const ticked = await call('POST', '/api/tick');
 check('"do one job now" works', ok(ticked) && 'worked' in ticked.body, JSON.stringify(ticked.body));
 

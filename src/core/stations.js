@@ -104,6 +104,16 @@ export const STATIONS = [
     counter: 'lookout',
     counterLabel: (v) => v || 'scanning',
   },
+  {
+    id: 'signpost',
+    name: 'Signpost',
+    building: 'hut',
+    tile: { x: 36, y: 15 },
+    door: { x: 38, y: 20 },
+    blurb: 'The Signwriter checks how findable every listing is, and the shop as a whole.',
+    counter: 'seoIssues',
+    counterLabel: (n) => (n ? `${n} to fix` : 'all findable'),
+  },
 ];
 
 /** The harbour: where startup ideas get found, built and marketed. */

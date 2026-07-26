@@ -1,6 +1,6 @@
 # Hartistic Valley
 
-Two businesses run by fourteen agents on one pixel-art dashboard, where every
+Two businesses run by fifteen agents on one pixel-art dashboard, where every
 building is a real queue and every villager is a real agent.
 
 - **The Valley** — an Etsy shop: digital products invented, designed and listed.
@@ -34,7 +34,12 @@ nothing else.
 7. **The Curator** turns what already works into more shop: bundles of
    finished products at a discount, and spin-off editions of anything that
    sells.
-8. **The Manager** keeps the whole thing moving and never approves anything
+8. **The Signwriter** does one thing: makes sure buyers can find the shop. It
+   reads every listing the way Etsy's search does, and the catalogue the way an
+   owner should — looking for listings competing with each other and for
+   searches nobody here is covering. It never rewrites a live listing itself,
+   because that resets what Etsy has learned about it.
+9. **The Manager** keeps the whole thing moving and never approves anything
    itself.
 
 They get better as they go. Every prompt carries what the shop has actually
@@ -116,6 +121,7 @@ in [docs/VENTURES.md](docs/VENTURES.md).
 | **Shopfront** | Packed and live listings. Turn the images into PNGs here. |
 | **Packhouse** | Bundles and spin-offs the Curator has suggested. |
 | **Lookout** | What the Researcher thinks buyers want right now. |
+| **Signpost** | The Signwriter's search report: every listing, and the shop as a whole. |
 | **Calendar** | The season the shop is currently pushing for. |
 | **Ledger** | Earnings, what sells, what does not, and what you keep approving. |
 
@@ -256,7 +262,7 @@ npm run teach -- everyone    the shop is called Hartistic, never write Hartistic
 
 Turning an idea down *with a reason* teaches the Scout automatically.
 
-They also start with about 460 lessons already learned — twenty-eight
+They also start with about 477 lessons already learned — twenty-nine
 **knowledge packs** that ship in the repo covering Etsy mechanics and search
 behaviour, print production, accessible and neurodivergent-friendly design,
 listing copy and listing images, the shop's year month by month, refunds and

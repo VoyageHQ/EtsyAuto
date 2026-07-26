@@ -8,6 +8,7 @@ import { bus, log } from '../core/events.js';
 import { buildState, productDetail } from './state.js';
 import { buildDigest, renderDigest, markSeen } from '../core/digest.js';
 import { checkShop, renderHealth } from '../core/health.js';
+import { sweep } from '../etsy/seo-audit.js';
 import { answer as answerApproval } from '../core/approvals.js';
 import { teach, forget, lessonsFor } from '../core/memory.js';
 import { loadKnowledge } from '../knowledge/index.js';
@@ -260,6 +261,13 @@ const routes = [
   }],
 
   ['POST', /^\/api\/knowledge\/restore$/, async () => loadKnowledge({ restoreDeleted: true })],
+
+  // Run the Signwriter's sweep now rather than waiting for the next one.
+  ['POST', /^\/api\/seo$/, async () => {
+    const report = sweep();
+    setSetting('seo_report', JSON.stringify({ ...report, at: Date.now() }));
+    return report;
+  }],
 
   ['GET', /^\/api\/health$/, async () => {
     const report = checkShop();

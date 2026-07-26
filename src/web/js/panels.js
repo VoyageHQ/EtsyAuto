@@ -46,6 +46,7 @@ const PANELS = {
   calendar: calendarPanel,
   ledger: ledgerPanel,
   lookout: lookoutPanel,
+  signpost: signpostPanel,
   packhouse: packhousePanel,
   // The harbour.
   lighthouse: lighthousePanel,
@@ -1215,6 +1216,80 @@ function packhousePanel(state, ctx) {
       });
     },
   };
+}
+
+/**
+ * Everything standing between the shop and being found.
+ *
+ * Grouped by what it costs rather than by listing: an owner with ten minutes
+ * wants the thing losing them searches, not a tidy per-product report.
+ */
+function signpostPanel(state, ctx) {
+  const report = state.seo;
+  const colour = { bad: 'var(--rose)', poor: 'var(--amber)', note: 'var(--dim)' };
+  const heading = { bad: 'costing you searches', poor: 'worth fixing', note: 'worth knowing' };
+
+  const explain = `<p class="quiet" style="margin-top:16px">The Signwriter never rewrites a live
+    listing itself. Changing one resets what Etsy has learned about it, so it says what to change and
+    leaves the timing to you — and it stays quiet about anything edited in the last four weeks.</p>`;
+
+  if (!report) {
+    return {
+      html: `<p class="quiet">The Signwriter has not read the shop yet. It sweeps every few hours on
+        its own, or send it now.</p>
+        <div class="bar" style="border:0"><button class="tiny" data-act="seo">check the shop's search</button></div>
+        ${explain}`,
+      mount: (root) => wireSeo(root, ctx),
+    };
+  }
+
+  const groups = ['bad', 'poor', 'note']
+    .map((severity) => {
+      const items = (report.findings || []).filter((f) => f.severity === severity);
+      if (!items.length) return '';
+      return `
+        <h4 style="margin:16px 0 8px;font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:${colour[severity]}">
+          ${heading[severity]} (${items.length})</h4>
+        ${items
+          .map(
+            (f) => `<div class="lesson"><div>
+              ${f.sku ? `<b>${esc(f.sku)}</b> ` : ''}<b style="color:${colour[severity]}">${esc(f.area)}</b><br />
+              ${esc(f.what)}<br /><span class="quiet">${esc(f.fix)}</span>
+            </div></div>`
+          )
+          .join('')}`;
+    })
+    .join('');
+
+  return {
+    html: `
+      <div class="bar">
+        <span class="quiet" style="flex:1">${esc(report.summary || '')}${
+          report.at ? ` · last read ${esc(when(report.at))}` : ''
+        }</span>
+        <button class="tiny" data-act="seo">check again</button>
+      </div>
+      ${groups || '<p class="quiet">Nothing is hurting your search position. That is the goal, not an empty page.</p>'}
+      ${explain}`,
+    mount: (root) => wireSeo(root, ctx),
+  };
+}
+
+function wireSeo(root, ctx) {
+  root.addEventListener('click', async (e) => {
+    if (e.target.dataset?.act !== 'seo') return;
+    e.target.disabled = true;
+    e.target.textContent = 'reading…';
+    try {
+      const report = await api.checkSeo();
+      ctx.toast(report.summary || 'done');
+    } catch (err) {
+      ctx.toast(err.message);
+    }
+    e.target.disabled = false;
+    e.target.textContent = 'check again';
+    ctx.refresh(true);
+  });
 }
 
 function lookoutPanel(state) {

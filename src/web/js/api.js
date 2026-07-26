@@ -29,6 +29,7 @@ export const api = {
   knowledge: (agentId) => request(`/api/knowledge/${agentId}`),
   restoreKnowledge: () => request('/api/knowledge/restore', { method: 'POST' }),
   health: () => request('/api/health'),
+  checkSeo: () => request('/api/seo', { method: 'POST' }),
   digest: () => request('/api/digest'),
   digestSeen: () => request('/api/digest/seen', { method: 'POST' }),
   tick: () => request('/api/tick', { method: 'POST' }),

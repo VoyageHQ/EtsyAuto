@@ -51,6 +51,10 @@ function stationCounts() {
     campaign: campaign ? `${campaign.name.toLowerCase()} ${daysLeft(campaign.ends_at)}` : null,
     salesTotal: salesTotal ? money(salesTotal, config.currency) : null,
     lookout: getSetting('lookout_note'),
+    seoIssues: (() => {
+      const report = json(getSetting('seo_report'), null);
+      return report ? (report.counts?.bad || 0) + (report.counts?.poor || 0) : 0;
+    })(),
     bundles:
       count("SELECT COUNT(*) FROM proposals WHERE status IN ('open','accepted')") +
       count("SELECT COUNT(*) FROM products WHERE category = 'Bundles' AND stage != 'listed'"),
@@ -186,6 +190,9 @@ export function buildState() {
         source: l.source,
         createdAt: l.created_at,
       })),
+    // The Signwriter's last sweep. Kept whole because the panel shows every
+    // finding and there are rarely many.
+    seo: json(getSetting('seo_report'), null),
     knowledge: {
       packs: packSummary(),
       total: count("SELECT COUNT(*) FROM lessons WHERE active = 1 AND source LIKE 'pack:%'"),

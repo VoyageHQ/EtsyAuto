@@ -277,7 +277,7 @@ for (const [, world] of Object.entries(WORLDS)) {
 // Every button the source defines should have appeared on some panel. One that
 // never renders is either dead code or a panel that silently stopped drawing.
 const DECLARED = ['all', 'none', 'more', 'approve', 'shelve', 'reject', 'tick',
-                  'loop-on', 'loop-off', 'teach', 'restore', 'sale', 'harvest', 'health'];
+                  'loop-on', 'loop-off', 'teach', 'restore', 'sale', 'harvest', 'health', 'seo'];
 
 // Buttons that are not data-act but still have to be reachable.
 const DECLARED_DATA = ['relist', 'rebuild', 'png', 'open'];

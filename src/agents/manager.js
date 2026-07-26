@@ -93,7 +93,17 @@ do not go near it.`,
       decisions.push('sent the Curator round the Packhouse');
     }
 
-    // 6. Keep the seasonal campaign current.
+    // 6. Let the Signwriter read the shop for findability. Search position is
+    //    slow-moving, so a sweep every few hours is plenty — and it must not
+    //    run so often that it nags about listings it has already reported.
+    const lastSeo = Number(getSetting('last_seo_sweep', '0'));
+    if (count("SELECT COUNT(*) FROM listings") > 0 && Date.now() - lastSeo > DAY / 4) {
+      setSetting('last_seo_sweep', String(Date.now()));
+      enqueue({ agent: 'signwriter', kind: 'signwriter.audit', subject: 'search sweep', priority: 7 });
+      decisions.push('sent the Signwriter round the listings');
+    }
+
+    // 7. Keep the seasonal campaign current.
     this.ensureCampaign();
 
     if (decisions.length) {

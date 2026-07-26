@@ -34,6 +34,7 @@ import listingImagesPack from './packs/listing-images.js';
 import etsyPolicyPack from './packs/etsy-policy.js';
 import shopBrandPack from './packs/shop-brand.js';
 import supportPack from './packs/support.js';
+import signwriterPack from './packs/signwriter.js';
 
 import ventureHouse from './packs/venture-house.js';
 import prospectorPack from './packs/prospector.js';
@@ -66,6 +67,7 @@ export const PACKS = [
   etsyPolicyPack,
   shopBrandPack,
   supportPack,
+  signwriterPack,
   ventureHouse,
   prospectorPack,
   analystPack,
