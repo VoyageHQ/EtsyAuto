@@ -18,6 +18,8 @@ import { money } from './core/util.js';
 import { buildDigest, renderDigest, markSeen } from './core/digest.js';
 import { writeBackup, readBackup } from './core/backup.js';
 import { checkShop, renderHealth } from './core/health.js';
+import { sweep } from './etsy/seo-audit.js';
+import { setSetting } from './core/db.js';
 
 const [command, ...rest] = process.argv.slice(2);
 const bold = (s) => `\x1b[1m${s}\x1b[0m`;
@@ -100,6 +102,50 @@ const commands = {
     const report = checkShop();
     console.log('\n' + renderHealth(report) + '\n');
     if (report.score === 'bad') process.exitCode = 1;
+  },
+
+  /**
+   * The Signwriter's sweep, on demand.
+   *
+   *   npm run seo
+   *   npm run seo -- --all      including what it is deliberately leaving alone
+   */
+  seo() {
+    const report = sweep();
+    console.log(`\n  ${bold(report.summary)}\n`);
+
+    if (!report.findings.length) {
+      console.log(dim('  Nothing is hurting your search position.\n'));
+      return;
+    }
+
+    const heading = {
+      bad: 'COSTING YOU SEARCHES',
+      poor: 'WORTH FIXING',
+      note: 'WORTH KNOWING',
+    };
+    const showNotes = rest.includes('--all');
+    let last = null;
+
+    for (const finding of report.findings) {
+      if (finding.severity === 'note' && !showNotes) continue;
+      if (finding.severity !== last) {
+        console.log(`  ${bold(heading[finding.severity])}`);
+        last = finding.severity;
+      }
+      console.log(`    · ${finding.sku ? `${finding.sku} ` : ''}${dim(`[${finding.area}]`)} ${finding.what}`);
+      console.log(`      ${dim(finding.fix)}`);
+    }
+
+    const hidden = report.findings.filter((f) => f.severity === 'note').length;
+    if (hidden && !showNotes) {
+      console.log(dim(`\n  ${hidden} more worth knowing — npm run seo -- --all to see them.`));
+    }
+
+    // Kept so the Signpost panel shows the same thing without redoing the work.
+    setSetting('seo_report', JSON.stringify({ ...report, at: Date.now() }));
+    console.log('');
+    if (report.counts.bad) process.exitCode = 1;
   },
 
   async ideas() {
@@ -287,6 +333,7 @@ ${bold(config.valleyName)}
   npm run knowledge [-- <agent>]   what the packs have taught everyone
   npm run digest                   what changed while you were away
   npm run health                   what is quietly wrong across the shop
+  npm run seo [-- --all]           how findable every listing is
   npm run backup [-- <path>]       everything that exists nowhere else
   npm run restore -- <path>        read a backup back in (merges, never deletes)
   node scripts/discord-setup.js    the Discord walkthrough

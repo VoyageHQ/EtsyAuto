@@ -32,6 +32,7 @@
     "knowledge": "node --disable-warning=ExperimentalWarning src/cli.js knowledge",
     "digest": "node --disable-warning=ExperimentalWarning src/cli.js digest",
     "health": "node --disable-warning=ExperimentalWarning src/cli.js health",
+    "seo": "node --disable-warning=ExperimentalWarning src/cli.js seo",
     "backup": "node --disable-warning=ExperimentalWarning src/cli.js backup",
     "restore": "node --disable-warning=ExperimentalWarning src/cli.js restore"
   },
