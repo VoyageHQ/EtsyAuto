@@ -733,6 +733,7 @@ function productCard(product, state, opts = {}) {
       <p>${esc(product.sku)} · ${product.pages || '?'} pages · ${money(product.price, currency)}
         ${product.listing?.tags?.length ? `· ${product.listing.tags.length} tags` : ''}</p>
       ${previews ? `<div class="previews">${previews}</div>` : ''}
+      ${opts.extra || ''}
       <div class="actions">
         ${opts.actions || ''}
         <button class="tiny" data-open="${esc(product.id)}">open the folder</button>
@@ -877,6 +878,48 @@ function reviewPanel(state, ctx) {
   };
 }
 
+/**
+ * A listing as a buyer meets it, not as a row of numbers.
+ *
+ * Etsy shows a thumbnail about 230px wide with the title clipped under it, and
+ * that is the whole of the decision for most people. "Only 6 tags" and "title
+ * is 132 characters" are true but abstract; seeing your own title cut off
+ * mid-word next to a picture you cannot read is not. This renders the search
+ * result at the size it will actually appear.
+ */
+const ETSY_THUMB = 230;
+const ETSY_TITLE_CLIP = 60; // roughly what survives under a search thumbnail
+
+function searchPreview(product, state) {
+  const listing = product.listing;
+  if (!listing) return '';
+  const title = String(listing.title || product.title);
+  const clipped = title.length > ETSY_TITLE_CLIP ? `${title.slice(0, ETSY_TITLE_CLIP - 1)}…` : title;
+  const lost = title.length > ETSY_TITLE_CLIP ? title.slice(ETSY_TITLE_CLIP - 1) : '';
+
+  return `
+    <div class="preview">
+      <div class="preview-card" style="width:${ETSY_THUMB}px">
+        <img src="/${esc(product.dir ? `out/${product.dir}/images/1-hero.svg` : '')}"
+             alt="" width="${ETSY_THUMB}" height="${Math.round(ETSY_THUMB * 0.8)}"
+             style="object-fit:cover;background:var(--panel-2);display:block" />
+        <p class="preview-title">${esc(clipped)}</p>
+        <p class="preview-price">${money(listing.price, state.shop.currency)}</p>
+      </div>
+      <div class="preview-notes">
+        <p class="quiet">This is roughly what a buyer sees in search: ${ETSY_THUMB}px wide, one second of
+        attention, forty others beside it.</p>
+        ${
+          lost
+            ? `<p class="quiet">Cut off in search: <span style="color:var(--rose)">${esc(lost)}</span>
+               — put what matters in the first ${ETSY_TITLE_CLIP} characters.</p>`
+            : '<p class="quiet">The whole title survives the crop.</p>'
+        }
+        <p class="quiet">${(listing.tags || []).length} of 13 tags used.</p>
+      </div>
+    </div>`;
+}
+
 function shopfrontPanel(state, ctx) {
   const products = state.products.filter((p) => p.stage === 'listed' || p.listing?.status === 'live');
   return {
@@ -884,6 +927,7 @@ function shopfrontPanel(state, ctx) {
       ? products
           .map((p) =>
             productCard(p, state, {
+              extra: searchPreview(p, state),
               actions: `
                 ${
                   p.listing?.exportPath

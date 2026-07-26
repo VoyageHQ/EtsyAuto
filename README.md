@@ -172,6 +172,18 @@ npm run digest              # the same thing in a terminal
 npm run digest -- --keep    # read it without marking it caught up
 ```
 
+## Seeing it as a buyer will
+
+The Shopfront shows each listing the way Etsy shows it in search: a 230px
+thumbnail with the title clipped underneath, which is the whole of the decision
+for most people. It marks what falls off the end of the title, so you can see
+whether the part that matters survives the crop.
+
+That view earned its place immediately — it caught the Scribe spending the
+first sixty characters saying "Christmas Budget & Gift Planner | Christmas
+Budget Planner", which is repetition Etsy does not reward and a buyer learns
+nothing from.
+
 ## Is anything wrong?
 
 The Inspector guards the gate — nothing gets past it broken. But a shop rots

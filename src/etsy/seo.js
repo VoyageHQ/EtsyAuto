@@ -114,22 +114,52 @@ function shortAudience(audience) {
  * Etsy shows roughly the first 40 characters in search, so the searchable
  * phrase goes first, then the detail, then the format.
  */
+/**
+ * Words that carry no meaning on their own, so repeating them costs nothing.
+ * "Planner" appearing twice is fine; "Christmas Budget" appearing twice is the
+ * problem.
+ */
+const NOISE_WORDS = new Set(['and', 'the', 'for', 'with', 'a', 'of', 'to', 'in', 'my', 'your', '&']);
+
+const significantWords = (text) =>
+  String(text)
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word.length > 2 && !NOISE_WORDS.has(word));
+
+/**
+ * Does this phrase mostly repeat what the title already says?
+ *
+ * An exact substring test is not enough. "Christmas Budget & Gift Planner"
+ * does not literally contain "Christmas Budget Planner" — the "& Gift" breaks
+ * it — so the keyword gets appended anyway and eats the first sixty
+ * characters, which is the only part a buyer sees under a search thumbnail.
+ * Repetition there buys nothing: Etsy does not rank a phrase higher for
+ * appearing twice, and the buyer learns nothing new.
+ */
+function mostlyRepeats(title, bit) {
+  const have = new Set(significantWords(title));
+  const words = significantWords(bit);
+  if (!words.length) return true;
+  const already = words.filter((word) => have.has(word)).length;
+  return already / words.length >= 0.6;
+}
+
 export function buildTitle({ name, keyword, audience, format }) {
   const lead = titleCase(name);
-  const parts = [lead];
   const bits = [];
-  if (keyword && !lead.toLowerCase().includes(String(keyword).toLowerCase())) {
-    bits.push(titleCase(keyword));
-  }
+  if (keyword) bits.push(titleCase(keyword));
   if (audience) bits.push(shortAudience(audience).replace(/^./, (c) => c.toUpperCase()));
   if (format) bits.push(format);
   bits.push('Printable PDF', 'Instant Download', 'A4 & US Letter');
 
-  let title = parts[0];
+  let title = lead;
   for (const bit of bits) {
     const candidate = `${title} | ${bit}`;
     if (candidate.length > LIMITS.title) continue;
-    if (title.toLowerCase().includes(bit.toLowerCase())) continue;
+    // Skip anything that just says the same thing again — that slot is worth
+    // more spent on a term the title does not already carry.
+    if (mostlyRepeats(title, bit)) continue;
     title = candidate;
   }
   return truncate(title, LIMITS.title);

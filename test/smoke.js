@@ -29,7 +29,7 @@ import { closestMatch, cannibalWarning, TOO_SIMILAR } from '../src/core/similari
 import { recordFailures, failureSummary } from '../src/core/retro.js';
 import { record, todayUsage, usageByAgent, overBudget } from '../src/core/spend.js';
 import { uid } from '../src/core/util.js';
-import { auditListing } from '../src/etsy/seo.js';
+import { auditListing, buildTitle } from '../src/etsy/seo.js';
 import { avatarFor } from '../src/discord/avatars.js';
 import { loadKnowledge, packSummary } from '../src/knowledge/index.js';
 import { writeBackup, readBackup } from '../src/core/backup.js';
@@ -454,6 +454,32 @@ console.log('\nWhat the agents have been taught');
   loadKnowledge();
   check('a lesson you deleted is not silently reinstated', !lessonsFor('scout', 'etsy').some((l) => l.id === victim.id));
   check('and can be brought back deliberately', loadKnowledge({ restoreDeleted: true }).added >= 1);
+}
+
+console.log('\nThe first sixty characters of a title');
+{
+  // Etsy clips the title under a search thumbnail, so those characters are the
+  // only ones most buyers ever read. Spending them saying the same thing twice
+  // buys nothing — Etsy does not rank a repeated phrase higher.
+  const repeated = buildTitle({
+    name: 'Christmas Budget & Gift Planner',
+    keyword: 'christmas budget planner',
+    audience: 'parents planning december',
+  });
+  check(
+    'a keyword that just repeats the name is dropped',
+    !/Christmas Budget Planner/i.test(repeated.replace('Christmas Budget & Gift Planner', '')),
+    repeated
+  );
+  check('   so something useful reaches the crop', /parents/i.test(repeated.slice(0, 60)), repeated.slice(0, 60));
+
+  const additive = buildTitle({ name: 'Meal Planner', keyword: 'weekly meal prep planner', audience: 'busy families' });
+  check('a keyword that genuinely adds words is kept', /weekly/i.test(additive), additive);
+
+  check(
+    'titles stay inside what Etsy accepts',
+    buildTitle({ name: 'A'.repeat(120), keyword: 'x', audience: 'y' }).length <= 140
+  );
 }
 
 console.log('\nNoticing what is quietly wrong');

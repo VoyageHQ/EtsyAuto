@@ -926,3 +926,54 @@ pre {
   color: var(--dim);
   white-space: pre-wrap;
 }
+
+/* --- the listing as a buyer meets it ---------------------------------------
+   Etsy gives a listing a ~230px thumbnail and about a second. Numbers ("title
+   is 132 characters") are true but abstract; seeing your own title cut off
+   mid-word beside a picture you cannot read is not. */
+.preview {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 10px 0;
+  padding: 10px;
+  background: var(--deep);
+  border: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.preview-card {
+  background: #ffffff;
+  padding: 0 0 6px;
+  border-radius: 3px;
+  flex: 0 0 auto;
+}
+
+.preview-card img {
+  border-radius: 3px 3px 0 0;
+}
+
+.preview-title {
+  margin: 6px 6px 2px;
+  font-family: Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  line-height: 1.3;
+  color: #222222;
+}
+
+.preview-price {
+  margin: 0 6px;
+  font-family: Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: #222222;
+}
+
+.preview-notes {
+  flex: 1 1 220px;
+  min-width: 200px;
+}
+
+.preview-notes p {
+  margin: 0 0 6px;
+}
