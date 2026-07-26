@@ -155,6 +155,23 @@ Three hard gates, and they are not configurable away:
 Anything waiting on you appears under **heads up** in the sidebar, and gets
 pushed to Discord with buttons if you have that switched on.
 
+## While you were away
+
+The whole point of an agent fleet is that it works when you do not, so you
+will routinely open this to a shop that moved overnight. Reconstructing that
+from a time-ordered feed is the wrong job to give a person at breakfast, so
+there is a card at the top of the sidebar that answers it in one line — what
+needs you, what got finished, what sold, what went wrong, what the agents
+taught themselves — and expands to the whole thing.
+
+It only clears when you press **got it**. Leaving the dashboard open on a
+second screen will never quietly eat the night's news.
+
+```bash
+npm run digest              # the same thing in a terminal
+npm run digest -- --keep    # read it without marking it caught up
+```
+
 There is a fourth rail on your wallet. Set `LLM_DAILY_TOKENS` and when the day's
 budget is spent the agents fall back to their offline craft rather than
 spending more — the shop keeps running, it just gets less inventive until

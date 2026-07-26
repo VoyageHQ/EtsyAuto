@@ -865,3 +865,64 @@ pre {
     flex: 0 0 46vh;
   }
 }
+
+/* --- while you were away ---------------------------------------------------
+   The agents work overnight, so the owner routinely arrives to a shop that
+   moved without them. This sits above everything else until it is dismissed,
+   because reconstructing a night from a time-ordered feed is the wrong job to
+   give a person at breakfast. */
+.panel.digest {
+  background: linear-gradient(180deg, rgba(227, 184, 120, 0.09), transparent);
+  border-bottom: 1px solid var(--amber);
+}
+
+#digest .digest-line {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+#digest .digest-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  margin-bottom: 8px;
+}
+
+#digest .digest-count {
+  background: var(--panel-2);
+  border-radius: 8px;
+  padding: 1px 7px;
+  font-size: 10px;
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+#digest .digest-count b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+#digest .digest-count.needs-you b {
+  color: var(--amber);
+}
+
+#digest .digest-count.went-wrong b {
+  color: var(--rose);
+}
+
+#digest pre {
+  margin: 0 0 8px;
+  padding: 8px;
+  background: var(--deep);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  max-height: 34vh;
+  overflow: auto;
+  font-family: var(--font);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--dim);
+  white-space: pre-wrap;
+}

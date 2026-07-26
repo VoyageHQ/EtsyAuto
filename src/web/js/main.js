@@ -12,6 +12,8 @@ const dom = {
   clockPhase: el('clock-phase'),
   bell: el('bell'),
   bellDot: el('bell-dot'),
+  digestPanel: el('digest-panel'),
+  digest: el('digest'),
   attention: el('attention'),
   attentionCount: el('attention-count'),
   agents: el('agents'),
@@ -89,6 +91,7 @@ async function refresh(force = false) {
     if (first) valley.setWorld(state.worlds[district] || state.world);
     valley.setState(visibleState());
     renderTop();
+    renderDigest();
     renderAttention();
     renderAgents();
     renderActivity();
@@ -150,6 +153,64 @@ function subLabel(station, value) {
   if (value) return String(value);
   return { campaign: 'no season', salesTotal: 'no data', lookout: 'scanning' }[station.counter] || '—';
 }
+
+/**
+ * What moved while nobody was watching.
+ *
+ * The agents run overnight, so the owner routinely opens this to a shop that
+ * changed without them. The activity feed already has every event, but it is
+ * ordered by time and what is actually wanted is ordered by consequence. This
+ * card answers "what did I miss" in one line, expands to the whole thing, and
+ * only goes away when it is dismissed — a poll must never clear it, or a
+ * dashboard left open on a second screen eats the night's news.
+ */
+function renderDigest() {
+  const d = state.digest;
+  if (!d || d.quiet) {
+    dom.digestPanel.hidden = true;
+    return;
+  }
+  dom.digestPanel.hidden = false;
+
+  const counts = [
+    ['needs you', d.waiting, 'needs-you'],
+    ['finished', d.finished, ''],
+    ['new ideas', d.ideas, ''],
+    ['sales', d.sales, ''],
+    ['went wrong', d.problems, 'went-wrong'],
+  ]
+    .filter(([, n]) => n > 0)
+    .map(([label, n, cls]) => `<span class="digest-count ${cls}"><b>${n}</b> ${label}</span>`)
+    .join('');
+
+  dom.digest.innerHTML = `
+    <p class="digest-line">${esc(d.headline)}</p>
+    <div class="digest-counts">${counts}</div>
+    <div class="actions">
+      <button class="tiny" data-digest="open">read it all</button>
+      <button class="tiny" data-digest="seen">got it</button>
+    </div>`;
+}
+
+dom.digest.addEventListener('click', async (e) => {
+  const act = e.target.dataset?.digest;
+  if (!act) return;
+  if (act === 'open') {
+    const full = await api.digest();
+    const holder = document.createElement('pre');
+    // The headline is already the line above. Repeating it just costs the
+    // reader a paragraph before they reach anything new.
+    holder.textContent = String(full.text).split('\n').slice(1).join('\n').trim();
+    e.target.closest('.actions').insertAdjacentElement('beforebegin', holder);
+    e.target.remove();
+    return;
+  }
+  if (act === 'seen') {
+    await api.digestSeen();
+    dom.digestPanel.hidden = true;
+    toast('caught up');
+  }
+});
 
 function renderAttention() {
   const items = state.attention;

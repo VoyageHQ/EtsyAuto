@@ -6,6 +6,7 @@ import { extname, join, normalize, dirname } from 'node:path';
 import config from '../core/config.js';
 import { bus, log } from '../core/events.js';
 import { buildState, productDetail } from './state.js';
+import { buildDigest, renderDigest, markSeen } from '../core/digest.js';
 import { answer as answerApproval } from '../core/approvals.js';
 import { teach, forget, lessonsFor } from '../core/memory.js';
 import { loadKnowledge } from '../knowledge/index.js';
@@ -254,6 +255,15 @@ const routes = [
   }],
 
   ['POST', /^\/api\/knowledge\/restore$/, async () => loadKnowledge({ restoreDeleted: true })],
+
+  ['GET', /^\/api\/digest$/, async () => {
+    const digest = buildDigest();
+    return { ...digest, text: renderDigest(digest) };
+  }],
+
+  // Marking it read is a deliberate act. Polling must never clear it, or a
+  // dashboard left open on a second screen quietly eats the night's news.
+  ['POST', /^\/api\/digest\/seen$/, async () => ({ seenAt: markSeen() })],
 
   ['POST', /^\/api\/tick$/, async () => ({ worked: await tick() })],
 

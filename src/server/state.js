@@ -25,6 +25,7 @@ import { insightsSummary } from '../core/insights.js';
 import { todayUsage, usageByAgent } from '../core/spend.js';
 import { failureSummary } from '../core/retro.js';
 import { money } from '../core/util.js';
+import { buildDigest } from '../core/digest.js';
 
 export function clock(date = new Date()) {
   const hour = date.getHours();
@@ -113,6 +114,22 @@ export function buildState() {
       // for: press pause and this goes false while autoLoop stays true.
       loopRunning: isRunning(),
     },
+    // What changed while you were not looking. Only the summary rides in the
+    // state payload — the full thing is a click away, because it is the kind
+    // of detail you want once rather than on every refresh.
+    digest: (() => {
+      const d = buildDigest();
+      return {
+        headline: d.headline,
+        quiet: d.quiet,
+        hours: d.hours,
+        waiting: d.waiting.length,
+        finished: d.finished.length,
+        ideas: d.ideas.length,
+        sales: d.sales.count,
+        problems: d.problems.length,
+      };
+    })(),
     // The dashboard shows one district at a time; both travel in the payload
     // because the whole thing is small and swapping instantly feels better.
     worlds: WORLDS,

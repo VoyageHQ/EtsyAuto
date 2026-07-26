@@ -82,7 +82,7 @@ check('GET /api/state answers', ok(state), `status ${state.status}`);
 const REQUIRED_STATE_KEYS = [
   'shop', 'worlds', 'divisions', 'counts', 'agents', 'attention', 'activity',
   'ideas', 'products', 'jobs', 'knowledge', 'ledger', 'ventures', 'signals',
-  'campaigns', 'insights', 'budget', 'proposals',
+  'campaigns', 'insights', 'budget', 'proposals', 'digest',
 ];
 for (const key of REQUIRED_STATE_KEYS) {
   check(`state carries "${key}"`, state.body?.[key] !== undefined);
@@ -223,6 +223,32 @@ check('an unknown agent returns an empty list rather than a 500', unknownAgent.s
 
 const restored = await call('POST', '/api/knowledge/restore');
 check('"bring back the ones I removed" works', ok(restored) && typeof restored.body.added === 'number');
+
+// The overnight digest. The agents run while the owner sleeps, so this is the
+// first thing they see; it has to be right and it must not clear itself.
+const digest = await call('GET', '/api/digest');
+check('GET /api/digest answers', ok(digest), `status ${digest.status}`);
+check('   with a headline', typeof digest.body?.headline === 'string', JSON.stringify(digest.body?.headline));
+check('   and a plain-text rendering for the terminal', typeof digest.body?.text === 'string');
+check('   and knows how long you were away', Number(digest.body?.hours) >= 1);
+check('   listing what is waiting on you', Array.isArray(digest.body?.waiting));
+
+const seen = await call('POST', '/api/digest/seen');
+check('"got it" marks it read', ok(seen) && Number(seen.body?.seenAt) > 0, JSON.stringify(seen.body));
+
+// Pressing "got it" has to actually work — including when approvals are still
+// open, since those live in the heads-up panel and repeating them here would
+// mean the card could never be dismissed.
+const afterSeen = await call('GET', '/api/digest');
+check('   and then it is quiet', afterSeen.body?.quiet === true, JSON.stringify(afterSeen.body?.headline));
+check('   while still counting what is outstanding', afterSeen.body?.waitingTotal >= 0);
+
+// Reading the state must NOT count as having seen it: a dashboard left open on
+// a second screen would otherwise quietly eat the night's news.
+await call('GET', '/api/state');
+await call('GET', '/api/state');
+const afterPolling = await call('GET', '/api/digest');
+check('polling the dashboard does not move the mark', afterPolling.body?.since === afterSeen.body?.since);
 
 const ticked = await call('POST', '/api/tick');
 check('"do one job now" works', ok(ticked) && 'worked' in ticked.body, JSON.stringify(ticked.body));

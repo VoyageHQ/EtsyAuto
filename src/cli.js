@@ -15,12 +15,27 @@ import { loadKnowledge, packSummary } from './knowledge/index.js';
 import { openApprovals, answer } from './core/approvals.js';
 import { listProducts } from './pipeline/products.js';
 import { money } from './core/util.js';
+import { buildDigest, renderDigest, markSeen } from './core/digest.js';
 
 const [command, ...rest] = process.argv.slice(2);
 const bold = (s) => `\x1b[1m${s}\x1b[0m`;
 const dim = (s) => `\x1b[2m${s}\x1b[0m`;
 
 const commands = {
+  /**
+   * What changed since you last looked.
+   *
+   * Printing it marks it read, because someone who has just read the night's
+   * news does not want to be told it again tomorrow. Pass --keep to look
+   * without clearing it.
+   */
+  digest() {
+    const d = buildDigest();
+    console.log('\n' + renderDigest(d) + '\n');
+    if (!rest.includes('--keep')) markSeen();
+    else console.log(dim('  (left unread — drop --keep to mark it caught up)\n'));
+  },
+
   async ideas() {
     const wanted = Number(rest[0]) || 8;
     const theme = rest.slice(Number(rest[0]) ? 1 : 0).join(' ') || null;
