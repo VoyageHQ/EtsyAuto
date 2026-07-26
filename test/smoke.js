@@ -486,6 +486,51 @@ console.log('\nThe first sixty characters of a title');
   );
 }
 
+console.log('\nThe Harbour proposing things that make sense');
+{
+  const signal = (id, text, phrase) => ({
+    id, source: 'test', external_id: id, title: text, text, url: `https://example.com/${id}`,
+    author: 'someone', score: 30, comments: 4, phrase, channel: 'hacker news', posted_at: Date.now(),
+  });
+
+  // Three people asking for the same thing is a market. The wording is
+  // deliberately verb-led, because that is how people write.
+  const real = synthesise(
+    [
+      signal('s1', 'I wish there was a way to chase unpaid invoices automatically every month.', 'i wish there was'),
+      signal('s2', 'Is there a tool that will chase unpaid invoices for me without me remembering?', 'is there a tool that'),
+      signal('s3', 'We still use a spreadsheet to chase unpaid invoices and it is awful.', 'we still use a spreadsheet'),
+    ],
+    4
+  );
+  check('three people asking for the same thing becomes a candidate', real.length >= 1, `${real.length}`);
+  check(
+    '   described in English, not spliced verb-first',
+    real[0] && !/ for (chase|track|manage|log) /.test(real[0].oneLiner),
+    real[0]?.oneLiner
+  );
+  check('   and named after what it is for', real[0] && /invoice/i.test(real[0].name), real[0]?.name);
+
+  // One person thinking aloud is an anecdote. The Prospector's own pack says
+  // so, and the synthesiser used to promote exactly this into a venture.
+  const poetry = synthesise(
+    [signal('p1', 'Is there an App that explores the smeared line between meanings? '.repeat(9), 'is there an app that')],
+    4
+  );
+  check(
+    'one person musing does not become six ventures',
+    poetry.length <= 1,
+    poetry.map((v) => v.name).join(', ')
+  );
+  check(
+    '   and nothing incoherent is put in front of the owner',
+    poetry.every((v) => !/ for (explores|takes|uses|instructs) /.test(v.oneLiner)),
+    poetry.map((v) => v.oneLiner).join(' | ')
+  );
+
+  check('no signals means no ventures, not invented ones', synthesise([], 4).length === 0);
+}
+
 console.log('\nSaying it to the buyer, not to the shop');
 {
   // The Scout's reasoning is written for the valley. Printed in a listing it

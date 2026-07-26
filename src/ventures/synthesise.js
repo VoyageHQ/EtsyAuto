@@ -185,7 +185,15 @@ export function synthesise(signals, wanted = 6) {
   const bags = new Map();
   const desires = new Map();
   for (const signal of signals) {
-    const desire = extractDesire(signal.text, signal.phrase) || signal.title || '';
+    // The want usually sits in the body, but plenty of posts put it in the
+    // title instead. Falling straight back to the raw title drags the signal
+    // phrase along with it — "a tracker for i wish there was a tool" — so try
+    // extracting from the title before settling for it whole.
+    const desire =
+      extractDesire(signal.text, signal.phrase) ||
+      extractDesire(signal.title, signal.phrase) ||
+      signal.title ||
+      '';
     desires.set(signal.id, desire);
     // The want is weighted far above the rest of the comment, which is usually
     // context, tangents and arguing.
@@ -214,25 +222,77 @@ export function synthesise(signals, wanted = 6) {
     if (clusters.length >= wanted * 2) break;
   }
 
-  // Anything left over that is unusually detailed is worth a look on its own.
-  for (const signal of signals) {
-    if (claimed.has(signal.id)) continue;
-    if ((signal.text || '').length < 240) continue;
-    clusters.push({
-      theme: desireTokens(desires.get(signal.id) || '')[0] || tokens(signal.title || signal.text)[0] || 'workflow',
-      members: [signal],
-      desires,
-    });
-    claimed.add(signal.id);
-    if (clusters.length >= wanted * 2) break;
-  }
+  // There used to be a second pass here that promoted any single long comment
+  // into a venture of its own. It is where "Explores Picks — a curated
+  // directory of what actually works for explores the smeared line between
+  // meanings" came from: one person, once, thinking aloud.
+  //
+  // The Prospector's own knowledge says one post is an anecdote and not a
+  // market, and the Harbour's whole promise to the owner is a shortlist backed
+  // by evidence. Proposing nothing is a real answer; proposing nonsense is not.
 
-  return clusters
+  const shaped = clusters
     .map((cluster) => shapeCluster(cluster, bags))
     .filter(Boolean)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, wanted);
+    .sort((a, b) => b.score - a.score);
+
+  // The Prospector's knowledge pack draws the line at three independent posts:
+  // below that it is an anecdote, not a market. Honour it here rather than
+  // filling the Lighthouse with things the Analyst will only have to kill.
+  // If nothing clears the bar, the best of what there is still goes up, marked
+  // by its own evidence count — but only one, not six.
+  const strong = shaped.filter((v) => (v.evidence || []).length >= 3);
+  return (strong.length ? strong : shaped.slice(0, 1)).slice(0, wanted);
 }
+
+/**
+ * Is this something a product could be built for, or just words that happened
+ * to sit next to a signal phrase?
+ *
+ * The offline synthesiser reads other people's comments, and comments contain
+ * jokes, tangents and the occasional bit of poetry. "explores the smeared line
+ * between meanings" matched "is there an app that" perfectly well and meant
+ * nothing buildable. Anything that reads as half a sentence rather than a
+ * thing gets dropped, because the owner is being asked to spend a fortnight of
+ * evenings on whatever comes out of here.
+ */
+function usableSubject(subject) {
+  const text = String(subject || '').trim();
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length < 2 || words.length > 8) return false;
+
+  // A comma means the clause was still going when it was cut. "takes an
+  // executable, collects all" is half a sentence, and reads as one.
+  if (text.includes(',')) return false;
+
+  // Every template splices this into a noun slot — "a focused tracker for
+  // <subject>". A phrase that starts with a verb comes out as "a tracker for
+  // takes an executable", which is not English. Better to drop the candidate
+  // than to put that in front of the owner as something to build.
+  if (LEADING_VERBS.test(words[0])) return false;
+
+  // A trailing preposition or bare quantifier is the same tell.
+  if (/^(to|of|for|with|and|or|in|on|at|all|any|some|that|which|this)$/i.test(words.at(-1))) return false;
+
+  // The scaffolding of the question itself is not a want. If it survived this
+  // far, extraction failed and the whole post came through unfiltered.
+  if (/^(i wish|is there|are there|does anyone|anyone know|has anyone|we still use|looking for|any recommendations)\b/i.test(text)) {
+    return false;
+  }
+
+  // At least one word has to carry meaning of its own. "the kind of thing" is
+  // six words and says nothing.
+  return desireTokens(text).length >= 1;
+}
+
+/**
+ * Verbs seen leading extracted wants. Not a complete list of English verbs —
+ * it does not need to be. It needs to catch the shapes that come out of "is
+ * there a tool that ..." and "I wish there was something that ...", which is
+ * where almost all of these start.
+ */
+const LEADING_VERBS =
+  /^(explores?|instructs?|takes?|uses?|collects?|produces?|handles?|allows?|lets?|makes?|does?|is|are|was|were|has|have|had|can|could|would|should|will|might|seems?|looks?|feels?|means?|gets?|goes?|works?|runs?|shows?|gives?|keeps?|puts?|turns?|sends?|reads?|writes?|converts?|generates?|supports?|helps?|automatically|manually|properly|easily|quickly|simply)$/i;
 
 function shapeCluster(cluster, bags) {
   const { theme, members, desires } = cluster;
@@ -242,11 +302,19 @@ function shapeCluster(cluster, bags) {
   // Describe it the way the people asking for it did, but trimmed to something
   // that reads as a noun phrase rather than half a sentence.
   const wants = members.map((m) => desires?.get(m.id)).filter(Boolean);
-  const subject = tidySubject(wants[0]) || theme;
+  // Several people described this. If the first one phrased it awkwardly, that
+  // is no reason to throw the whole cluster away — try what the others said.
+  const subject = wants.map(tidySubject).find(usableSubject) || '';
+  if (!subject) return null;
 
   const audience = audienceFor(members);
   const rng = seededRandom(members.map((m) => m.id).join(''));
-  const name = nameFor(desireTokens(wants[0] || '')[0] || theme, pattern.id, rng);
+  // Name it after what it is for. Naming it after a single token pulled out of
+  // a comment produced "Parento Log" and "Defend Ledger", which tell the owner
+  // nothing about what they are being asked to approve.
+  // English puts the head noun at the end of a phrase, so "chase unpaid
+  // invoices" names itself "Unpaid Invoices", not "Chase Unpaid".
+  const name = nameFor(nameWords(subject).slice(-2).join(' ') || theme, pattern.id, rng);
 
   const quotes = members.slice(0, 4).map((m) => ({
     signalId: m.id,
@@ -289,6 +357,25 @@ function shapeCluster(cluster, bags) {
 }
 
 /** "a way to exclude the plain ones (single color" -> "exclude the plain ones" */
+/**
+ * Verbs that turn up at the front of a want often enough to be worth handling
+ * properly. Anything not here and still verb-led is caught by usableSubject
+ * and dropped, which is the safe direction to be wrong in.
+ */
+const ACTION_VERBS = new Set([
+  'chase', 'track', 'manage', 'organise', 'organize', 'schedule', 'log', 'record',
+  'sync', 'import', 'export', 'merge', 'split', 'compare', 'monitor', 'archive',
+  'search', 'filter', 'sort', 'share', 'publish', 'remind', 'notify', 'batch',
+  'reconcile', 'invoice', 'budget', 'plan', 'book', 'renew', 'chase-up',
+]);
+
+/** English gerunds, to the depth this actually needs. */
+function toGerund(verb) {
+  if (verb.endsWith('e') && !verb.endsWith('ee')) return `${verb.slice(0, -1)}ing`;
+  if (/[^aeiou][aeiou][^aeiouwxy]$/.test(verb)) return `${verb}${verb.at(-1)}ing`;
+  return `${verb}ing`;
+}
+
 function tidySubject(desire) {
   if (!desire) return '';
   const cleaned = String(desire)
@@ -297,9 +384,34 @@ function tidySubject(desire) {
     .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase();
-  const words = cleaned.split(' ').slice(0, 6);
-  // Never end on a dangling connector.
-  while (words.length && /^(to|the|a|an|of|for|with|and|or|in|on|at|that|which|from|by)$/.test(words.at(-1))) {
+  // "I wish there was **a way to** chase unpaid invoices" — the scaffolding
+  // belongs to the sentence it was lifted from, not to the thing being asked
+  // for, and it reads badly once spliced into "a tracker for ...".
+  const withoutScaffold = cleaned
+    .replace(
+      /^(?:a |an |the )?(?:way|method|means|option|ability|tool|app|thing|system)\s+(?:to|for|of)\s+/,
+      ''
+    )
+    // "is there a tool that **will** chase unpaid invoices" — the modal belongs
+    // to the question, not to the thing being asked for.
+    .replace(/^(?:will|would|can|could|should|might|must|may|shall)\s+/, '');
+  // Every template reads "a tracker for <subject>", so a subject that opens
+  // with a bare verb comes out as "a tracker for chase unpaid invoices". The
+  // want is good — it is the grammar that is wrong — so make it a gerund
+  // rather than throwing the candidate away.
+  const gerunded = withoutScaffold.replace(/^([a-z]+)\b/, (word) =>
+    ACTION_VERBS.has(word) ? toGerund(word) : word
+  );
+  const words = gerunded.split(' ').slice(0, 6);
+  // Never end on a dangling connector, or on the adjective that was clearly
+  // still describing something: "chasing unpaid invoices for a small" was cut
+  // one word before "studio".
+  while (
+    words.length &&
+    /^(to|the|a|an|of|for|with|and|or|in|on|at|that|which|from|by|small|large|big|new|old|other|whole|entire|same|different|single|multiple|several)$/.test(
+      words.at(-1)
+    )
+  ) {
     words.pop();
   }
   return words.join(' ');
@@ -315,7 +427,30 @@ function audienceFor(members) {
   return 'the people having this problem in public';
 }
 
+/**
+ * The words in a want that are worth naming a business after.
+ *
+ * "chasing unpaid invoices automatically every month" ends in a frequency, not
+ * in the thing itself, and taking the last two words literally produced "Every
+ * Month Sheet". Time and manner words describe when and how, never what.
+ */
+const TEMPORAL = new Set([
+  'every', 'each', 'daily', 'weekly', 'monthly', 'yearly', 'annually', 'hourly',
+  'day', 'days', 'week', 'weeks', 'month', 'months', 'year', 'years', 'time',
+  'again', 'always', 'never', 'often', 'sometimes', 'automatically', 'manually',
+  'quickly', 'easily', 'properly', 'instead', 'without', 'together',
+]);
+
+const nameWords = (subject) => desireTokens(subject).filter((word) => !TEMPORAL.has(word));
+
 function nameFor(theme, patternId, rng) {
+  // An adverb in a product name is always wrong. "Invoices Automatically
+  // Board" came from a want that ended in one.
+  theme = String(theme)
+    .split(/\s+/)
+    .filter((word) => !/ly$/i.test(word))
+    .join(' ') || theme;
+
   const suffixes = {
     tracker: ['Ledger', 'Log', 'Board', 'Sheet'],
     automation: ['Runner', 'Pilot', 'Flow', 'Relay'],
