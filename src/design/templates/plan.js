@@ -5,28 +5,20 @@
 // they are opinionated but genuinely usable products, not lorem ipsum.
 import { PALETTE_NAMES } from './layout.js';
 import { seededRandom, titleCase } from '../../core/util.js';
+import { paletteForCategory } from '../../knowledge/apply.js';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks', 'Prep ahead'];
 
-const PALETTE_BY_CATEGORY = {
-  'Budget planners': 'sage',
-  'Chore charts': 'ocean',
-  'ADHD & neurodivergent': 'lilac',
-  'Meal planners': 'clay',
-  'Wedding templates': 'blush',
-  'Kids activities': 'ocean',
-  'Business spreadsheets': 'ink',
-  'Fitness trackers': 'ocean',
-  'Wall art': 'clay',
-  'Digital planners': 'ink',
-  'Home admin': 'ink',
-  'Self care': 'blush',
-  'Teacher & study': 'sage',
-  Seasonal: 'clay',
-  Pets: 'clay',
-  Travel: 'ocean',
-};
+// Which palette a category wears is a branding decision, not a layout one, so
+// it lives in the shop-brand knowledge pack. Editing that table changes the
+// whole catalogue's look with no code to touch — and, unlike a constant in
+// here, it survives on the owner's machine because packs ship in the repo.
+const PALETTE_BY_CATEGORY = new Proxy(
+  {},
+  { get: (_, category) => (typeof category === 'string' ? paletteForCategory(category) : undefined) }
+);
+
 
 const PRINT_NOTE =
   'Print at 100% (do not "scale to fit"). Works on A4 and US Letter. Prints cleanly in black and white.';

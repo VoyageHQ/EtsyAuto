@@ -67,9 +67,9 @@ Lessons are cheap. A dozen sharp ones beat one long paragraph.
 
 ## What they already know
 
-The agents do not start empty. Twenty-one **knowledge packs** ship in the repo —
-around 340 lessons of real domain knowledge — and load into the lessons table
-every time the project starts.
+The agents do not start empty. Twenty-eight **knowledge packs** ship in the
+repo — around 460 lessons of real domain knowledge — and load into the lessons
+table every time the project starts.
 
 ```bash
 npm run knowledge              # every pack, and how many lessons are in force
@@ -112,6 +112,11 @@ that can be expressed as a check are also enforced in code:
 | Licence-needing or out-of-scope ventures | Analyst kills on sight |
 | Subscriptions priced below what fees allow | Analyst flags |
 | The seasonal calendar and its lead times | What the Manager asks the Scout for, all year |
+| Medical claims on supportive products | Inspector rejects "treats ADHD", allows "helps with ADHD" |
+| Etsy policy traps and licence overreach | Inspector rejects before it reaches your shop |
+| Listing image count, and prices baked into images | Inspector rejects; the mockup engine never draws a price |
+| Which palette a category wears | Every product the Maker builds |
+| Ground a one-person venture cannot stand on | Analyst kills on sight |
 
 That last one is worth spelling out: the shop's campaign calendar is generated
 from the `listByMonth` table in the seasonal pack. Edit that table and the shop

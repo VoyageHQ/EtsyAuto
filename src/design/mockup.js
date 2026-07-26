@@ -156,10 +156,12 @@ export function buildMockups(spec, doc, opts = {}) {
       });
       y += 28 * lines.length + 20;
     }
-    if (opts.price) {
-      parts.push(text(80, H - 90, `${opts.currency || ''}${Number(opts.price).toFixed(2)}`, { size: 44, bold: true, fill: pal.accent }));
-      parts.push(text(80, H - 60, 'DIGITAL DOWNLOAD', { size: 14, bold: true, fill: pal.faint, tracking: 2 }));
-    }
+    // Deliberately no price. Etsy caches listing images and the shop reprices
+    // for sales and seasons; a price baked into a picture outlives the offer
+    // and then reads as a bait and switch. The price is on the listing, where
+    // it stays correct on its own.
+    parts.push(text(80, H - 90, 'DIGITAL DOWNLOAD', { size: 30, bold: true, fill: pal.accent, tracking: 2 }));
+    parts.push(text(80, H - 58, 'Nothing is posted to you', { size: 18, fill: pal.faint }));
     const hero = pages[1] || pages[0];
     parts.push(pageCard(hero, 730, 170, 380));
     parts.push('</svg>');

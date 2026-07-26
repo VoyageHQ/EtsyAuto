@@ -29,6 +29,11 @@ import managerPack from './packs/manager.js';
 import seasonalPack from './packs/seasonal.js';
 import searchPack from './packs/etsy-search.js';
 import aftercarePack from './packs/aftercare.js';
+import licensingPack from './packs/licensing.js';
+import listingImagesPack from './packs/listing-images.js';
+import etsyPolicyPack from './packs/etsy-policy.js';
+import shopBrandPack from './packs/shop-brand.js';
+import supportPack from './packs/support.js';
 
 import ventureHouse from './packs/venture-house.js';
 import prospectorPack from './packs/prospector.js';
@@ -39,6 +44,8 @@ import marketerPack from './packs/marketer.js';
 import harbourmasterPack from './packs/harbourmaster.js';
 import distributionPack from './packs/distribution.js';
 import productSensePack from './packs/product-sense.js';
+import ventureLegalPack from './packs/venture-legal.js';
+import firstCustomersPack from './packs/first-customers.js';
 
 /** Every pack that ships with the project. */
 export const PACKS = [
@@ -54,6 +61,11 @@ export const PACKS = [
   seasonalPack,
   searchPack,
   aftercarePack,
+  licensingPack,
+  listingImagesPack,
+  etsyPolicyPack,
+  shopBrandPack,
+  supportPack,
   ventureHouse,
   prospectorPack,
   analystPack,
@@ -63,6 +75,8 @@ export const PACKS = [
   harbourmasterPack,
   distributionPack,
   productSensePack,
+  ventureLegalPack,
+  firstCustomersPack,
 ];
 
 /**

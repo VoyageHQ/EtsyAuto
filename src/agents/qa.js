@@ -17,6 +17,11 @@ import {
   findShameLanguage,
   findOverPromises,
   findFiller,
+  findMedicalClaims,
+  findPolicyTraps,
+  findOverreachingLicence,
+  licenceTermsStated,
+  imageProblems,
 } from '../knowledge/apply.js';
 import { money } from '../core/util.js';
 
@@ -77,11 +82,23 @@ You would rather send something back than let it out half done.`,
       if (!fixedRatio) notes.push('Only one paper size was produced. Buyers outside the UK will ask.');
     }
     const bar = rulesFor('qa').thresholds || {};
-    if (mockups.length < (bar.minImages ?? 4)) {
-      problems.push(
-        `Only ${mockups.length} listing image(s). Etsy shows a gallery and buyers scroll it — ${bar.minImages ?? 4} is the minimum that performs.`
-      );
-    }
+
+    // For a digital download the images are the product, so read them rather
+    // than counting them: the listing-images pack knows what the first one
+    // has to say and what must never be baked into any of them.
+    problems.push(
+      ...imageProblems(
+        mockups.map((m) => {
+          const abs = join(config.root, m.path || '');
+          return {
+            label: m.label,
+            role: m.role,
+            svg: /\.svg$/i.test(m.path || '') && existsSync(abs) ? readFileSync(abs, 'utf8') : undefined,
+          };
+        })
+      )
+    );
+
     const pageCount = product.spec?.pages?.length || 0;
     if (pageCount < (bar.minPages ?? 3)) {
       problems.push(
@@ -135,6 +152,41 @@ You would rather send something back than let it out half done.`,
     if (filler.length > 1) {
       notes.push(`Copy reads as machine-written: "${filler.slice(0, 2).join('", "')}".`);
     }
+
+    // A supportive product and a medical device claim are separated by one
+    // verb. "Helps with" is the shop's whole business; "treats" is regulated.
+    const medical = findMedicalClaims(listingText + ' ' + specText);
+    if (medical.length) {
+      problems.push(
+        `Medical claim: "${medical.join('", "')}". Supportive is fine, therapeutic is regulated — ` +
+          'say what the product helps someone do, never what it treats.'
+      );
+    }
+
+    const policyTraps = findPolicyTraps(listingText);
+    if (policyTraps.length) {
+      problems.push(
+        `Against Etsy policy: "${policyTraps.join('", "')}". This suspends shops rather than losing sales.`
+      );
+    }
+
+    // Buyers read a licence promise as permission. If the product does not
+    // carry that licence, the sentence is the whole dispute.
+    const overreach = findOverreachingLicence(listingText);
+    if (overreach.length) {
+      problems.push(
+        `The listing grants rights the shop does not intend: "${overreach.join('", "')}". ` +
+          'Remove it unless the product genuinely carries that licence.'
+      );
+    }
+
+    // Every product must tell the buyer what they may do with it. Silence is
+    // read as permission to do anything.
+    const readme = assets.find((a) => /READ-ME/i.test(a.path || ''));
+    if (listing && !licenceTermsStated(`${listing.description} ${readme?.label || ''}`)) {
+      notes.push('Nothing tells the buyer what they may do with the file. Say "personal use" plainly.');
+    }
+
 
     // --- the listing -------------------------------------------------------
     if (!listing) {

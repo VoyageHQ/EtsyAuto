@@ -42,6 +42,15 @@ import {
   spellingVariants,
   ventureKillReasons,
   evidenceStrength,
+  findMedicalClaims,
+  findPolicyTraps,
+  findOverreachingLicence,
+  licenceTermsStated,
+  imageProblems,
+  paletteForCategory,
+  findHardKills,
+  overCollectingFields,
+  findPhrases,
 } from '../src/knowledge/apply.js';
 
 let failures = 0;
@@ -476,6 +485,42 @@ console.log('\nKnowledge that works without a model');
     ).length >= 1
   );
   check('one post is an anecdote, three is a signal', evidenceStrength(1).level === 'anecdote' && evidenceStrength(3).level === 'signal');
+
+  // The newer packs. Each of these is knowledge that has to hold with no model
+  // configured, because that is how the shop is actually run.
+  check('a medical claim is caught', findMedicalClaims('This chart treats ADHD').length >= 1);
+  check('   but helping is still allowed', findMedicalClaims('A gentle chart that helps with ADHD').length === 0);
+  check('a policy trap is caught', findPolicyTraps('A dupe of the famous planner').length >= 1);
+  check('   but an honest comparison is not', findPolicyTraps('Similar in feel to a bullet journal').length === 0);
+  check('a licence the shop cannot grant is caught', findOverreachingLicence('Commercial use included').length >= 1);
+  check('telling the buyer what they may do counts', licenceTermsStated('For personal use only.'));
+  check('   and saying nothing does not', !licenceTermsStated('Enjoy your new planner.'));
+
+  check('a thin image set is caught', imageProblems([{ label: 'a' }, { label: 'b' }]).length >= 1);
+  check(
+    '   and a price baked into an image is caught',
+    imageProblems([
+      { label: '1', svg: '<text>INSTANT DOWNLOAD</text>' }, { label: '2', svg: '<text>only \u00a34.99</text>' },
+      { label: '3', svg: '<text>x</text>' }, { label: '4', svg: '<text>y</text>' },
+    ]).some((p) => p.includes('outlive'))
+  );
+  check(
+    '   while a clean set passes',
+    imageProblems([
+      { label: '1', svg: '<text>INSTANT DOWNLOAD</text>' }, { label: '2', svg: '<text>a</text>' },
+      { label: '3', svg: '<text>b</text>' }, { label: '4', svg: '<text>c</text>' },
+    ]).length === 0
+  );
+
+  check('the category decides the palette, from the pack', paletteForCategory('ADHD & neurodivergent') === 'lilac');
+  check('   and an unknown category still gets one', Boolean(paletteForCategory('Something New')));
+
+  check('ground a solo venture cannot stand on is caught', findHardKills('it holds customer funds').length >= 1);
+  check('data a small venture should not collect is caught', overCollectingFields(['email', 'date of birth']).length === 1);
+
+  // A currency symbol is a literal, not a regex anchor. Read as a pattern, "$"
+  // matches every string there has ever been.
+  check('a phrase made of punctuation is matched literally', findPhrases('nothing here', ['$']).length === 0);
 }
 
 console.log('\nDiscord');

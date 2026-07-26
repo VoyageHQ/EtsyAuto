@@ -19,12 +19,17 @@ export function findPhrases(text, phrases = []) {
   const haystack = lower(text);
   return phrases.filter((phrase) => {
     const needle = lower(phrase);
-    // Some entries are patterns rather than plain words.
+    // Some entries are patterns rather than plain words. Guessing which from
+    // punctuation alone is not safe: a currency symbol like "$" is a perfectly
+    // ordinary thing to ban from an image, but as a regex it is an anchor that
+    // matches every string ever passed in. So compile it, then throw the
+    // pattern away if it turns out to match nothing in particular.
     if (/[\\^$.*+?()[\]{}|]/.test(needle)) {
       try {
-        return new RegExp(needle, 'i').test(haystack);
+        const pattern = new RegExp(needle, 'i');
+        if (!pattern.test('')) return pattern.test(haystack);
       } catch {
-        return haystack.includes(needle);
+        // Not a valid pattern, so it was always meant literally.
       }
     }
     return haystack.includes(needle);
@@ -184,3 +189,140 @@ export default {
   ventureKillReasons,
   evidenceStrength,
 };
+
+// --- from the etsy-policy pack ---------------------------------------------
+
+/**
+ * Claims that turn a supportive product into a regulated one.
+ *
+ * The distinction the shop lives on: a chore chart that helps someone with
+ * ADHD is a printable, while a chore chart that says it treats ADHD is a
+ * medical device claim. The first is the whole business, the second closes it.
+ */
+export const findMedicalClaims = (text) => findPhrases(text, allRules().medicalClaims || []);
+
+/** Wording that invites a suspension rather than merely a bad review. */
+export const findPolicyTraps = (text) => findPhrases(text, allRules().policyTraps || []);
+
+/** Products this shop does not make, whatever the demand looks like. */
+export const findProhibitedProduct = (text) => findPhrases(text, allRules().prohibitedProducts || []);
+
+// --- from the licensing pack -----------------------------------------------
+
+/**
+ * Licence promises the shop cannot keep.
+ *
+ * Buyers read "commercial use included" as permission to resell the file. If
+ * the product does not genuinely carry that licence, the sentence is the whole
+ * dispute.
+ */
+export const findOverreachingLicence = (text) =>
+  findPhrases(text, allRules().overreachingLicenceClaims || []);
+
+/**
+ * Has the buyer been told what they may do with it?
+ *
+ * Any of the cue phrases satisfies this — the requirement is that terms exist
+ * at all, not that they are worded a particular way. A file with no stated
+ * terms is assumed by a lot of buyers to be theirs to do anything with.
+ */
+export function licenceTermsStated(text) {
+  return findPhrases(text, allRules().licenceStatementCues || []).length > 0;
+}
+
+/** Asset origins a human has to sign off before they go in a product. */
+export const findAssetsNeedingLicenceCheck = (text) =>
+  findPhrases(text, allRules().assetSourcesNeedingCheck || []);
+
+// --- from the listing-images pack ------------------------------------------
+
+/**
+ * What is wrong with the images on a listing, in plain words.
+ *
+ * For a digital download the images are the product — nobody can pick it up,
+ * so a thin image set is not a cosmetic problem, it is the main reason an
+ * otherwise good listing sits there.
+ *
+ * The checks that look at wording need the rendered image, not its filename:
+ * "1-hero" says nothing about what a buyer sees. Pass `svg` where it is to
+ * hand and those checks run; leave it out and only the countable ones do,
+ * which is better than inventing a complaint from a filename.
+ *
+ * @param {{label?: string, role?: string, svg?: string}[]} images
+ * @returns {string[]}
+ */
+export function imageProblems(images = []) {
+  const rules = allRules().images || {};
+  const problems = [];
+  const count = images.length;
+
+  if (count < (rules.minAcceptable ?? 4)) {
+    problems.push(
+      `Only ${count} listing image(s). Etsy allows ${rules.max ?? 10} and a listing with fewer than ` +
+        `${rules.minAcceptable ?? 4} measurably underperforms.`
+    );
+  }
+  if (count > (rules.max ?? 10)) {
+    problems.push(`${count} images, but Etsy only accepts ${rules.max ?? 10}.`);
+  }
+
+  // A buyer who thinks a parcel is coming leaves a bad review however good the
+  // file is, so the first image has to say it is a download.
+  const firstSvg = images[0]?.svg;
+  const cues = rules.firstImageMustSuggest || [];
+  if (count && firstSvg && cues.length && !findPhrases(firstSvg, cues).length) {
+    problems.push('The first image never says it is a printable or an instant download.');
+  }
+
+  // Prices and offers age badly: Etsy caches images, the shop reprices, and
+  // then the picture contradicts the listing.
+  const rendered = images.map((i) => i.svg).filter(Boolean).join(' ');
+  if (rendered) {
+    const baked = findPhrases(rendered, rules.neverOnImages || []);
+    if (baked.length) {
+      problems.push(`Do not bake "${baked.join('", "')}" into an image — it will outlive the offer.`);
+    }
+  }
+
+  return problems;
+}
+
+// --- from the shop-brand pack ----------------------------------------------
+
+/**
+ * The palette a category should stay in.
+ *
+ * The shop is judged as a grid, not as single listings, so the same kind of
+ * product should look the same each time. The table lives in the shop-brand
+ * pack, which means editing knowledge changes the catalogue's whole look with
+ * no code to touch.
+ */
+export function paletteForCategory(category) {
+  const brand = allRules().brand || {};
+  return brand.paletteByCategory?.[category] || brand.defaultPalette || 'sage';
+}
+
+/** Structural things a pack of this length owes the reader. */
+export function structureProblems(pageCount = 0) {
+  const brand = allRules().brand || {};
+  const problems = [];
+  if (brand.requireContentsPageFrom && pageCount >= brand.requireContentsPageFrom) {
+    problems.push(`contents page (${pageCount} pages)`);
+  }
+  if (brand.requirePageNumbersFrom && pageCount >= brand.requirePageNumbersFrom) {
+    problems.push(`page numbers (${pageCount} pages)`);
+  }
+  return problems;
+}
+
+// --- from the venture-legal pack -------------------------------------------
+
+/** Ground a one-person evening project cannot legally stand on. */
+export const findHardKills = (text) => findPhrases(text, allRules().hardKills || []);
+
+/** Personal data a small venture has no business collecting. */
+export function overCollectingFields(fields = []) {
+  const data = allRules().data || {};
+  const never = (data.neverCollect || []).map(lower);
+  return fields.filter((field) => never.some((n) => lower(field).includes(n)));
+}

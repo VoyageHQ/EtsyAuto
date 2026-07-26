@@ -173,10 +173,11 @@ npm run teach -- everyone    the shop is called Hartistic, never write Hartistic
 
 Turning an idea down *with a reason* teaches the Scout automatically.
 
-They also start with about 340 lessons already learned — twenty-one **knowledge
-packs** that ship in the repo covering Etsy mechanics and search behaviour,
-print production, accessible and neurodivergent-friendly design, listing copy,
-the shop's year month by month, refunds and reviews, one-person unit economics,
+They also start with about 460 lessons already learned — twenty-eight
+**knowledge packs** that ship in the repo covering Etsy mechanics and search
+behaviour, print production, accessible and neurodivergent-friendly design,
+listing copy and listing images, the shop's year month by month, refunds and
+reviews, asset licensing, Etsy's own policies, one-person unit economics,
 distribution with no audience, and the law around collecting emails:
 
 ```bash
