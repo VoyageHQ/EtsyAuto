@@ -577,7 +577,17 @@ function officePanel(state, ctx) {
         </div>
       </div>
 
-      <h4 style="margin:0 0 8px;font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--amber)">teach an agent</h4>
+      <h4 style="margin:0 0 8px;font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--amber)">is anything wrong?</h4>
+      <p class="quiet" style="margin-bottom:8px">The Inspector guards the gate. This looks at what has gone
+      wrong <i>since</i> — listings that lost their tags, work that stalled, prices under the floor,
+      decisions still waiting on you.</p>
+      <div class="bar" style="border:0;padding-top:0">
+        <button class="tiny" data-act="health">check the shop</button>
+        <span style="flex:1"></span>
+      </div>
+      <div id="health-report"></div>
+
+      <h4 style="margin:18px 0 8px;font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--amber)">teach an agent</h4>
       <div class="bar" style="border:0;padding-top:0">
         <select id="teach-agent">${agentOptions}</select>
         <span style="flex:1"></span>
@@ -663,6 +673,27 @@ function officePanel(state, ctx) {
           await api.loop(false);
           ctx.toast('loop paused');
           return ctx.refresh(true);
+        }
+        if (act === 'health') {
+          const holder = root.querySelector('#health-report');
+          holder.innerHTML = '<p class="quiet">looking…</p>';
+          const report = await api.health();
+          if (!report.findings.length) {
+            holder.innerHTML = '<p class="quiet">Nothing wrong that I can see.</p>';
+            return;
+          }
+          const colour = { bad: 'var(--rose)', poor: 'var(--amber)', note: 'var(--dim)' };
+          holder.innerHTML = `
+            <p style="margin:8px 0;color:${colour[report.score]}">${esc(report.summary)}</p>
+            ${report.findings
+              .map(
+                (f) => `<div class="lesson">
+                  <div><b style="color:${colour[f.severity]}">${esc(f.area)}</b> ${esc(f.what)}
+                  <br /><span class="quiet">${esc(f.fix)}</span></div>
+                </div>`
+              )
+              .join('')}`;
+          return;
         }
         if (act === 'restore') {
           const { added } = await api.restoreKnowledge();

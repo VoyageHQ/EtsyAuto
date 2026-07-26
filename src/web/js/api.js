@@ -27,6 +27,7 @@ export const api = {
   forget: (id) => request(`/api/lessons/${id}/forget`, { method: 'POST' }),
   knowledge: (agentId) => request(`/api/knowledge/${agentId}`),
   restoreKnowledge: () => request('/api/knowledge/restore', { method: 'POST' }),
+  health: () => request('/api/health'),
   digest: () => request('/api/digest'),
   digestSeen: () => request('/api/digest/seen', { method: 'POST' }),
   tick: () => request('/api/tick', { method: 'POST' }),

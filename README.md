@@ -172,6 +172,24 @@ npm run digest              # the same thing in a terminal
 npm run digest -- --keep    # read it without marking it caught up
 ```
 
+## Is anything wrong?
+
+The Inspector guards the gate — nothing gets past it broken. But a shop rots
+*after* the gate too, in ways no single agent is watching for: a listing that
+lost its tags in a rebuild, work that stalled three days ago with nobody on it,
+a price that ended up under the floor once Etsy's fees are counted, a decision
+that has been waiting on you for a week.
+
+Each of those is invisible on its own. Together they are the difference between
+a shop and a folder of files.
+
+```bash
+npm run health      # worst first, with what to do about each
+```
+
+Or press **check the shop** in the Office. It exits non-zero when something is
+actively costing you, so it works in a cron job.
+
 ## Keeping a copy
 
 `data/valley.db` is gitignored, which is right — it is your shop, not this

@@ -33,6 +33,7 @@ import { auditListing } from '../src/etsy/seo.js';
 import { avatarFor } from '../src/discord/avatars.js';
 import { loadKnowledge, packSummary } from '../src/knowledge/index.js';
 import { writeBackup, readBackup } from '../src/core/backup.js';
+import { checkShop } from '../src/core/health.js';
 import {
   findTrademarks,
   findBannedPhrases,
@@ -453,6 +454,42 @@ console.log('\nWhat the agents have been taught');
   loadKnowledge();
   check('a lesson you deleted is not silently reinstated', !lessonsFor('scout', 'etsy').some((l) => l.id === victim.id));
   check('and can be brought back deliberately', loadKnowledge({ restoreDeleted: true }).added >= 1);
+}
+
+console.log('\nNoticing what is quietly wrong');
+{
+  const clean = checkShop();
+  check('a healthy shop reports a score', ['good', 'poor', 'bad'].includes(clean.score), clean.score);
+  check('   and every finding carries a fix', clean.findings.every((f) => f.what && f.fix));
+
+  // Plant the faults a shop really develops, and check each is found. A
+  // checker that cannot fail is worth nothing.
+  const listing = one('SELECT * FROM listings LIMIT 1');
+  const product = one('SELECT * FROM products LIMIT 1');
+  if (listing && product) {
+    run('UPDATE listings SET title = ?, tags = ? WHERE id = ?', 'Disney Budget Planner', JSON.stringify(['budget']), listing.id);
+    run('UPDATE products SET price = 0.99 WHERE id = ?', product.id);
+    const found = checkShop();
+
+    check(
+      'a trademark that got in before the checks existed is caught',
+      found.findings.some((f) => /disney/i.test(f.what) && f.severity === 'bad')
+    );
+    check(
+      'a listing that lost its tags is caught',
+      found.findings.some((f) => /tags/i.test(f.what))
+    );
+    check(
+      'a price under the floor the fees demand is caught',
+      found.findings.some((f) => f.area === 'money')
+    );
+    check('and the worst thing is listed first', found.findings[0]?.severity === 'bad');
+    check('   with the shop scored accordingly', found.score === 'bad');
+
+    // Put it back so later checks see the shop as it was.
+    run('UPDATE listings SET title = ?, tags = ? WHERE id = ?', listing.title, listing.tags, listing.id);
+    run('UPDATE products SET price = ? WHERE id = ?', product.price, product.id);
+  }
 }
 
 console.log('\nBacking up what exists nowhere else');

@@ -7,6 +7,7 @@ import config from '../core/config.js';
 import { bus, log } from '../core/events.js';
 import { buildState, productDetail } from './state.js';
 import { buildDigest, renderDigest, markSeen } from '../core/digest.js';
+import { checkShop, renderHealth } from '../core/health.js';
 import { answer as answerApproval } from '../core/approvals.js';
 import { teach, forget, lessonsFor } from '../core/memory.js';
 import { loadKnowledge } from '../knowledge/index.js';
@@ -255,6 +256,11 @@ const routes = [
   }],
 
   ['POST', /^\/api\/knowledge\/restore$/, async () => loadKnowledge({ restoreDeleted: true })],
+
+  ['GET', /^\/api\/health$/, async () => {
+    const report = checkShop();
+    return { ...report, text: renderHealth(report) };
+  }],
 
   ['GET', /^\/api\/digest$/, async () => {
     const digest = buildDigest();

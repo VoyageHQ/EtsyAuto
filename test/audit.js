@@ -250,6 +250,18 @@ await call('GET', '/api/state');
 const afterPolling = await call('GET', '/api/digest');
 check('polling the dashboard does not move the mark', afterPolling.body?.since === afterSeen.body?.since);
 
+// The shop health check. The Inspector guards the gate; this looks at what has
+// gone wrong since, which no single agent watches for.
+const health = await call('GET', '/api/health');
+check('GET /api/health answers', ok(health), `status ${health.status}`);
+check('   with findings it can render', Array.isArray(health.body?.findings) && typeof health.body?.text === 'string');
+check('   scored so the dashboard can pick a colour', ['good', 'poor', 'bad'].includes(health.body?.score), health.body?.score);
+check(
+  '   and every finding says what to do about it',
+  (health.body?.findings || []).every((f) => f.what && f.fix && f.severity),
+  JSON.stringify((health.body?.findings || []).find((f) => !f.fix) || '')
+);
+
 const ticked = await call('POST', '/api/tick');
 check('"do one job now" works', ok(ticked) && 'worked' in ticked.body, JSON.stringify(ticked.body));
 

@@ -17,6 +17,7 @@ import { listProducts } from './pipeline/products.js';
 import { money } from './core/util.js';
 import { buildDigest, renderDigest, markSeen } from './core/digest.js';
 import { writeBackup, readBackup } from './core/backup.js';
+import { checkShop, renderHealth } from './core/health.js';
 
 const [command, ...rest] = process.argv.slice(2);
 const bold = (s) => `\x1b[1m${s}\x1b[0m`;
@@ -87,6 +88,18 @@ const commands = {
     }
     if (!report.dryRun) console.log(dim('\n  Nothing was deleted. Rows already here were left alone unless you passed --overwrite.\n'));
     else console.log(dim('\n  Nothing was changed. Drop --dry-run to do it for real.\n'));
+  },
+
+  /**
+   * What is quietly wrong across the whole shop.
+   *
+   * The Inspector guards the gate, but a shop rots after the gate too, in
+   * ways no single agent watches for.
+   */
+  health() {
+    const report = checkShop();
+    console.log('\n' + renderHealth(report) + '\n');
+    if (report.score === 'bad') process.exitCode = 1;
   },
 
   async ideas() {
@@ -273,6 +286,7 @@ ${bold(config.valleyName)}
   npm run list                     every product and where it is up to
   npm run knowledge [-- <agent>]   what the packs have taught everyone
   npm run digest                   what changed while you were away
+  npm run health                   what is quietly wrong across the shop
   npm run backup [-- <path>]       everything that exists nowhere else
   npm run restore -- <path>        read a backup back in (merges, never deletes)
   node scripts/discord-setup.js    the Discord walkthrough
