@@ -13,6 +13,7 @@ import {
   setVentureStage,
 } from '../ventures/pipeline.js';
 import { update, one, all } from '../core/db.js';
+import { deleteDraftListing, listingState, etsyEnabled } from '../etsy/api.js';
 import { now, BadInput } from '../core/util.js';
 import { teach } from '../core/memory.js';
 
@@ -268,6 +269,77 @@ export function rebuild(productId) {
   setStage(productId, 'design', { status: 'active' });
   scheduleStage(getProduct(productId));
   return getProduct(productId);
+}
+
+/**
+ * Send a finished product to Etsy again.
+ *
+ * Needed more often than it sounds. A draft deleted by hand on Etsy leaves this
+ * side still believing it is listed; a listing held back because its images
+ * would not render has nothing to retry it; and a rebuilt product needs its
+ * draft replaced rather than patched.
+ *
+ * If the old draft is still there it is deleted first, so this never leaves two
+ * listings for one product. An ACTIVE listing is never touched — that is a
+ * decision for the owner in Etsy, not a side effect of pressing a button here.
+ *
+ * @param {string} productId
+ * @returns {Promise<{queued: boolean, removed: string|null, note: string}>}
+ */
+export async function relist(productId) {
+  const product = getProduct(productId);
+  if (!product) throw new BadInput('No such product.');
+  const listing = one('SELECT * FROM listings WHERE product_id = ?', productId);
+  if (!listing) throw new BadInput('Nothing has been written for this product yet.');
+
+  let removed = null;
+  let note = '';
+
+  if (listing.etsy_listing_id && etsyEnabled()) {
+    try {
+      const state = await listingState(listing.etsy_listing_id);
+      if (state.state === 'draft') {
+        await deleteDraftListing(listing.etsy_listing_id);
+        removed = listing.etsy_listing_id;
+        note = `Deleted the old draft ${removed}.`;
+      } else {
+        throw new BadInput(
+          `That listing is "${state.state}" on Etsy, not a draft. Take it down there first — ` +
+            'a live listing has views and favourites behind it.'
+        );
+      }
+    } catch (err) {
+      if (err instanceof BadInput) throw err;
+      // Already gone is the commonest case, and it is exactly why this exists.
+      note = `Etsy no longer has ${listing.etsy_listing_id} — carrying on with a fresh one.`;
+    }
+  }
+
+  // Forget the old id either way, so a failure here cannot leave this side
+  // pointing at a listing that is not there.
+  update('listings', listing.id, {
+    etsy_listing_id: null,
+    status: 'ready',
+    updated_at: now(),
+  });
+  update('products', productId, { status: 'active', updated_at: now() });
+
+  enqueue({
+    agent: 'lister',
+    kind: 'lister.publish',
+    subject: `re-draft ${product.sku}`,
+    payload: { productId },
+    priority: 2,
+    unique: false,
+  });
+
+  log({
+    agent: 'lister',
+    kind: 'listed',
+    message: `${product.sku} queued to go to Etsy again. ${note}`.trim(),
+  });
+  pushState('product');
+  return { queued: true, removed, note };
 }
 
 /** Ask the Scout for ideas right now, optionally on a theme. */

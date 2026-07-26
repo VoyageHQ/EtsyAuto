@@ -77,6 +77,36 @@ export function checkShop({ staleDays = 45 } = {}) {
     }
   }
 
+  // --- work that is finished but blocked --------------------------------
+  // A blocked product is finished work earning nothing, and it is invisible
+  // unless something says so: it is not in the Inspector's queue, not waiting
+  // on an approval, and not moving.
+  for (const product of all(
+    "SELECT sku, title, stage FROM products WHERE status = 'blocked'"
+  )) {
+    add(
+      'bad',
+      'blocked',
+      `${product.sku} is blocked at the ${product.stage} stage.`,
+      'Open the Shopfront and press "send to etsy" to try again, or "rebuild files" first.'
+    );
+  }
+
+  // A product the shop thinks is listed, with no Etsy id against it, means the
+  // draft was deleted on Etsy or never landed.
+  for (const row of all(
+    `SELECT p.sku FROM products p
+       JOIN listings l ON l.product_id = p.id
+      WHERE p.stage = 'listed' AND (l.etsy_listing_id IS NULL OR l.etsy_listing_id = '')`
+  )) {
+    add(
+      'poor',
+      'listing',
+      `${row.sku} is marked as listed but has no Etsy listing behind it.`,
+      'Press "send to etsy" in the Shopfront to put a fresh draft up.'
+    );
+  }
+
   // --- listings that are live but underbuilt ----------------------------
   const bar = rulesFor('qa').thresholds || {};
   for (const listing of all(

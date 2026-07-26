@@ -736,6 +736,12 @@ function productCard(product, state, opts = {}) {
       ${opts.extra || ''}
       <div class="actions">
         ${opts.actions || ''}
+        ${
+          product.listing
+            ? `<button class="tiny" data-relist="${esc(product.id)}"
+                 title="Delete the Etsy draft if it is still there, then create a fresh one">send to etsy</button>`
+            : ''
+        }
         <button class="tiny" data-open="${esc(product.id)}">open the folder</button>
         <button class="tiny" data-rebuild="${esc(product.id)}">rebuild files</button>
       </div>
@@ -755,6 +761,20 @@ function wireProducts(root, ctx) {
       const detail = await api.product(open);
       window.open(`/out/${detail.dir}/`, '_blank');
       return;
+    }
+    const relist = e.target.dataset?.relist;
+    if (relist) {
+      e.target.disabled = true;
+      e.target.textContent = 'sending…';
+      try {
+        const { note } = await api.relist(relist);
+        ctx.toast(note || 'queued for Etsy');
+      } catch (err) {
+        ctx.toast(err.message);
+      }
+      e.target.disabled = false;
+      e.target.textContent = 'send to etsy';
+      return ctx.refresh(true);
     }
     const png = e.target.dataset?.png;
     if (png) {
@@ -921,7 +941,13 @@ function searchPreview(product, state) {
 }
 
 function shopfrontPanel(state, ctx) {
-  const products = state.products.filter((p) => p.stage === 'listed' || p.listing?.status === 'live');
+  // Blocked products belong here too. A listing held back because its images
+  // would not render is finished work earning nothing, and the Shopkeeper tells
+  // you to come to the Shopfront and press "send to etsy" — so it has to be
+  // here to press.
+  const products = state.products.filter(
+    (p) => p.stage === 'listed' || p.listing?.status === 'live' || (p.status === 'blocked' && p.listing)
+  );
   return {
     html: products.length
       ? products

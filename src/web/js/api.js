@@ -16,6 +16,7 @@ export const api = {
   state: () => request('/api/state'),
   product: (id) => request(`/api/products/${id}`),
   rebuild: (id) => request(`/api/products/${id}/rebuild`, { method: 'POST' }),
+  relist: (id) => request(`/api/products/${id}/relist`, { method: 'POST' }),
   saveMockups: (id, images) =>
     request(`/api/products/${id}/mockups`, { method: 'POST', body: { images } }),
   decideIdeas: (ids, decision, note = '') =>

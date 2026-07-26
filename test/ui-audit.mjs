@@ -278,8 +278,49 @@ for (const [, world] of Object.entries(WORLDS)) {
 // never renders is either dead code or a panel that silently stopped drawing.
 const DECLARED = ['all', 'none', 'more', 'approve', 'shelve', 'reject', 'tick',
                   'loop-on', 'loop-off', 'teach', 'restore', 'sale', 'harvest', 'health'];
+
+// Buttons that are not data-act but still have to be reachable.
+const DECLARED_DATA = ['relist', 'rebuild', 'png', 'open'];
 for (const act of DECLARED) {
   check(`the "${act}" control renders somewhere`, Boolean(controls?.[act]), 'never appeared');
+}
+
+// The product controls live on their own attributes rather than data-act.
+// Products sit in different buildings depending on their stage, so look in all
+// three rather than assuming which one has them today. Switch back to the
+// valley first: the walk above finishes in the harbour, where none of these
+// tabs exist, and looking for them there reports the app as broken when it is
+// the test standing in the wrong place.
+await evaluate(`
+  (async () => {
+    for (let i = 0; i < 4; i++) {
+      if (document.querySelector('#tabs [data-station="workshop"]')) return;
+      document.getElementById('district-switch').click();
+      await new Promise((r) => setTimeout(r, 600));
+    }
+  })()
+`);
+
+const productControls = await evaluate(`
+  (async () => {
+    const found = new Set();
+    for (const id of ['workshop', 'review-hall', 'shopfront']) {
+      const el = document.querySelector('#tabs [data-station="' + id + '"]');
+      if (!el) continue;
+      el.click();
+      const modal = document.getElementById('modal');
+      for (let i = 0; i < 20 && modal.hidden; i++) await new Promise((r) => setTimeout(r, 100));
+      for (const name of ['relist', 'rebuild', 'png', 'open']) {
+        if (document.querySelector('#modal-body [data-' + name + ']')) found.add(name);
+      }
+      document.getElementById('modal-close')?.click();
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    return [...found];
+  })()
+`);
+for (const name of DECLARED_DATA) {
+  check(`the "${name}" product control renders`, (productControls || []).includes(name), (productControls || []).join(', '));
 }
 
 check('no page errors across the whole walk', consoleErrors.length === 0, consoleErrors.slice(0, 4).join(' | '));

@@ -1,7 +1,7 @@
 // The dashboard server. Plain node:http — no framework, no build step.
 import { createServer } from 'node:http';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { extname, join, normalize, dirname } from 'node:path';
 import config from '../core/config.js';
 import { bus, log } from '../core/events.js';
@@ -12,7 +12,7 @@ import { answer as answerApproval } from '../core/approvals.js';
 import { teach, forget, lessonsFor } from '../core/memory.js';
 import { loadKnowledge } from '../knowledge/index.js';
 import { getAgent } from '../agents/registry.js';
-import { decideIdeas, requestIdeas, rebuild, tick, start, stop, isRunning } from '../pipeline/orchestrator.js';
+import { decideIdeas, requestIdeas, rebuild, relist, tick, start, stop, isRunning } from '../pipeline/orchestrator.js';
 import { decideVenture, setCampaignStatus } from '../ventures/pipeline.js';
 import { enqueue } from '../pipeline/queue.js';
 import { all, insert, setSetting, getSetting, update, one } from '../core/db.js';
@@ -119,6 +119,10 @@ const routes = [
   }],
 
   ['POST', /^\/api\/products\/([\w-]+)\/rebuild$/, async (req, res, [, id]) => rebuild(id)],
+
+  // Send a finished product to Etsy again — after deleting the draft there by
+  // hand, or after a rebuild, or when the images could not be made first time.
+  ['POST', /^\/api\/products\/([\w-]+)\/relist$/, async (req, res, [, id]) => relist(id)],
 
   // The browser rasterises the SVG mockups and posts the PNGs back, which is
   // how we get Etsy-ready images without any paid tooling.
@@ -311,6 +315,81 @@ const routes = [
   })],
 ];
 
+/**
+ * A plain index of one product folder.
+ *
+ * The dashboard's "open the folder" button used to 404: the static handler
+ * serves files and there was nothing behind a directory. That left the files
+ * the whole shop exists to produce reachable only by digging through the
+ * project in a file manager.
+ *
+ * Deliberately plain HTML with no styling to speak of — this is a place to
+ * grab a file from, not a page to admire.
+ */
+function folderPage(abs, rel) {
+  const entries = readdirSync(abs, { withFileTypes: true })
+    .map((entry) => {
+      const child = join(abs, entry.name);
+      const stat = statSync(child);
+      return {
+        name: entry.name,
+        dir: entry.isDirectory(),
+        size: stat.size,
+      };
+    })
+    .sort((a, b) => (a.dir === b.dir ? a.name.localeCompare(b.name) : a.dir ? -1 : 1));
+
+  const kb = (bytes) => (bytes < 1024 ? `${bytes} B` : `${Math.round(bytes / 1024)} KB`);
+  const esc = (value) =>
+    String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  // What each thing is for, since the filenames alone do not say.
+  const WHAT = {
+    '.pdf': 'the product — this is what the buyer prints',
+    '.csv': 'editable spreadsheet companion',
+    '.png': 'listing image, ready for Etsy',
+    '.svg': 'listing image source',
+    '.txt': 'what the buyer opens first',
+    '.md': 'for you, not the buyer',
+  };
+  const describe = (name) => {
+    if (/^LISTING\.md$/i.test(name)) return 'title, tags and description to paste into Etsy';
+    if (/^READ-ME-FIRST/i.test(name)) return 'goes to the buyer with the files';
+    if (/^design-brief/i.test(name)) return 'rebuild it by hand in Canva if you like';
+    const ext = name.slice(name.lastIndexOf('.')).toLowerCase();
+    return WHAT[ext] || '';
+  };
+
+  const parent = rel.split('/').slice(0, -1).join('/');
+  const rows = entries
+    .map((entry) => {
+      const href = `/${rel.replace(/\/$/, '')}/${encodeURIComponent(entry.name)}`;
+      return `<tr>
+        <td><a href="${esc(href)}"${entry.dir ? '' : ' download'}>${esc(entry.name)}${entry.dir ? '/' : ''}</a></td>
+        <td class="s">${entry.dir ? '' : kb(entry.size)}</td>
+        <td class="w">${esc(entry.dir ? 'folder' : describe(entry.name))}</td>
+      </tr>`;
+    })
+    .join('');
+
+  return `<!doctype html><meta charset="utf-8"><title>${esc(rel)}</title>
+<style>
+  body{font:14px/1.6 ui-monospace,Menlo,monospace;background:#0e1620;color:#e7e0cd;margin:0;padding:24px}
+  h1{font-size:15px;margin:0 0 4px;color:#e3b878}
+  p{margin:0 0 18px;color:#8ea0ad;font-size:12px}
+  table{border-collapse:collapse;width:100%;max-width:900px}
+  td{padding:6px 10px;border-bottom:1px solid #2c3f52;vertical-align:top}
+  a{color:#8fb8d8}
+  .s{color:#62737f;white-space:nowrap;text-align:right}
+  .w{color:#8ea0ad;font-size:12px}
+  .back{display:inline-block;margin-bottom:14px;color:#8ea0ad}
+</style>
+<h1>${esc(rel)}</h1>
+<p>Everything this product produced. Click any file to download it.
+${parent && parent !== 'out' ? `<a class="back" href="/${esc(parent)}/">↑ up a level</a>` : ''}</p>
+<table>${rows || '<tr><td>empty</td></tr>'}</table>`;
+}
+
 function httpError(status, message) {
   const err = new Error(message);
   err.status = status;
@@ -365,6 +444,14 @@ export function createDashboardServer() {
         const abs = join(config.root, rel);
         if (!abs.startsWith(config.outDir)) throw httpError(403, 'Nope.');
         if (await serveFile(res, abs)) return;
+        // A folder, not a file. "Open the folder" pointed here and got a 404,
+        // which left people with no way to reach their own products from the
+        // dashboard at all.
+        if (existsSync(abs) && statSync(abs).isDirectory()) {
+          res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+          res.end(folderPage(abs, rel));
+          return;
+        }
         throw httpError(404, 'No such file.');
       }
 

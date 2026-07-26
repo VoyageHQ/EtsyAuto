@@ -3,7 +3,7 @@
 import { join } from 'node:path';
 import Agent from './base.js';
 import config from '../core/config.js';
-import { getProduct, getListing, assetsFor, setStage } from '../pipeline/products.js';
+import { getProduct, getListing, assetsFor, setStage, blockProduct } from '../pipeline/products.js';
 import { writeListingPack } from '../etsy/export.js';
 import { createDraftListing, etsyEnabled } from '../etsy/api.js';
 import { rasterise, findBrowser } from '../design/rasterise.js';
@@ -112,11 +112,18 @@ say so plainly.`,
         const images = await this.ensureImages(product);
 
         if (!images.length) {
+          // Held, not lost. Marking it blocked is what gives it a way back:
+          // it shows in the Shopfront with a "send to Etsy" button, the health
+          // check reports it, and the Manager stops treating it as finished.
+          // The first version of this just returned, which left the product in
+          // a state nothing retried and nothing displayed — worse than the
+          // imageless draft it was written to prevent.
+          blockProduct(product.id, 'no listing images could be made');
           this.say(
-            `${product.sku} is ready but I could not make the listing images, and Etsy will not let a ` +
-              'listing be published without one. Open the Shopfront and press "save pngs", then ' +
-              'approve it again — your browser can do it in a click.' +
-              (findBrowser() ? '' : ' (No Chrome, Edge or Chromium found on this machine.)'),
+            `${product.sku} is held: I could not make the listing images, and Etsy will not let a ` +
+              'listing be published without one. Open the Shopfront and press ' +
+              '"send to etsy" to try again, or "save pngs" first and your browser will do it.' +
+              (findBrowser() ? '' : ' (No Chrome, Edge, Chromium or Brave found on this machine.)'),
             { kind: 'listed', level: 'warn', meta: { productId: product.id } }
           );
           this.goHome();

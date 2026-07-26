@@ -286,6 +286,17 @@ if (products.length) {
   const assets = await call('GET', `/api/assets/${products[0].id}`);
   check('GET /api/assets/:id works', ok(assets) && Array.isArray(assets.body.assets));
 
+  // "send to etsy" — after deleting a draft by hand, or a held listing, or a
+  // rebuild. With Etsy not connected it should still requeue rather than error.
+  const relisted = await call('POST', `/api/products/${products[0].id}/relist`);
+  check('"send to etsy" works', ok(relisted) && relisted.body.queued === true, JSON.stringify(relisted.body));
+  check(
+    '   and it forgets the old listing id so nothing points at a listing that is gone',
+    !one('SELECT etsy_listing_id FROM listings WHERE product_id = ?', products[0].id)?.etsy_listing_id
+  );
+  const relistNothing = await call('POST', '/api/products/prod_nope/relist');
+  check('re-listing something that does not exist is refused', relistNothing.status === 400, `status ${relistNothing.status}`);
+
   const rebuilt = await call('POST', `/api/products/${products[0].id}/rebuild`);
   check('"rebuild" works', ok(rebuilt), JSON.stringify(rebuilt.body).slice(0, 160));
 
@@ -413,6 +424,15 @@ for (const attempt of ['/../package.json', '/out/../package.json', '/out/../../.
     `status ${res.status}`
   );
 }
+// "Open the folder" points at a directory, and the static handler only served
+// files — so the one button that reaches your finished products 404'd.
+if (products.length && products[0].dir) {
+  const folder = await call('GET', `/out/${products[0].dir}/`);
+  check('a product folder opens instead of 404ing', folder.status === 200, `status ${folder.status}`);
+  check('   and lists the files with download links', String(folder.body).includes('download'));
+  check('   including the PDF the buyer gets', /\.pdf/i.test(String(folder.body)));
+}
+
 const missing = await call('GET', '/out/nothing-here.pdf');
 check('a missing generated file is a 404', missing.status === 404, `status ${missing.status}`);
 
