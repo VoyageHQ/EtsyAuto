@@ -5,7 +5,7 @@ import config from '../core/config.js';
 import { all, count, getSetting, setSetting, insert, one } from '../core/db.js';
 import { enqueue } from '../pipeline/queue.js';
 import { createProductFromIdea, listProducts, activeProductCount, scheduleStage } from '../pipeline/products.js';
-import { openApprovals } from '../core/approvals.js';
+import { openApprovals, waitingOnOwner } from '../core/approvals.js';
 import { uid, now, titleCase } from '../core/util.js';
 import { rulesFor } from '../knowledge/index.js';
 import { seasonHint } from './scout.js';
@@ -63,16 +63,19 @@ do not go near it.`,
       }
     }
 
-    // 3. Chase anything that has stalled with nobody working on it.
+    // 3. Chase anything that has stalled with nobody working on it — where
+    //    "nobody" includes you. A product whose agent ended by asking a
+    //    question has no job queued and looks stalled, so this used to redo
+    //    the work and ask again, once per tick, forever.
     for (const product of listProducts("WHERE status = 'active' AND stage NOT IN ('ready','listed')")) {
       const busy = one(
         "SELECT id FROM jobs WHERE status IN ('queued','running') AND payload LIKE ?",
         `%${product.id}%`
       );
-      if (!busy) {
-        scheduleStage(product);
-        decisions.push(`nudged ${product.sku} at the ${product.stage} stage`);
-      }
+      if (busy) continue;
+      if (waitingOnOwner(product.id)) continue;
+      scheduleStage(product);
+      decisions.push(`nudged ${product.sku} at the ${product.stage} stage`);
     }
 
     // 4. Let the Lookout have a look round once a day.

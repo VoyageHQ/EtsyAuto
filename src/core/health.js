@@ -93,6 +93,24 @@ export function checkShop({ staleDays = 45 } = {}) {
     );
   }
 
+  // --- the same question, over and over ---------------------------------
+  // Repeats mean something is redoing work rather than waiting. The guards
+  // that stop it are in place, but if one is ever got round the pile is the
+  // first visible symptom, and it is worth naming rather than leaving the
+  // owner to scroll.
+  {
+    const open = openApprovals();
+    const distinct = new Set(open.map((a) => `${a.kind} ${a.title}`)).size;
+    if (open.length - distinct >= 3) {
+      add(
+        'bad',
+        'repeats',
+        `${open.length} questions are waiting but only ${distinct} are different.`,
+        'Run npm run tidy to cancel the copies. Something is redoing work rather than waiting for you.'
+      );
+    }
+  }
+
   // --- something creating listings in bulk ------------------------------
   // The failure this exists for: an upload path with no approval gate put
   // 130-odd duplicate drafts in a live shop overnight. The gate is in place

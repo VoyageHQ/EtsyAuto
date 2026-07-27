@@ -17,6 +17,32 @@ import { bus, log, pushState } from './events.js';
  * @param {{value:string,label:string}[]} [req.options]
  */
 export function ask(req) {
+  // Never ask the same question twice while the first one is still open.
+  //
+  // The heads-up panel reached 33 items, 18 of them the identical sentence,
+  // because an agent that ends its job by asking rather than by advancing gets
+  // re-nudged by its manager every tick — and each run opened a fresh
+  // approval. Whatever the caller's bug is, the owner should see one copy of
+  // the question. Matched on kind and title rather than refId: the repeat
+  // usually carries a brand new refId (a new campaign row, a new draft), which
+  // is exactly why refId cannot be the thing that catches it.
+  const twin = one(
+    "SELECT * FROM approvals WHERE status = 'open' AND kind = ? AND title = ?",
+    req.kind,
+    req.title
+  );
+  if (twin) {
+    log({
+      agent: req.agent,
+      kind: 'asked',
+      level: 'note',
+      message: `Already waiting on you for this, so I did not ask again: ${req.title}`,
+      meta: { approvalId: twin.id, repeat: true },
+      discord: false,
+    });
+    return twin.id;
+  }
+
   const id = uid('ask');
   insert('approvals', {
     id,
@@ -44,6 +70,25 @@ export function ask(req) {
   bus.emit('approval:open', { id, ...req });
   pushState('approval');
   return id;
+}
+
+/**
+ * Is the owner already being asked about any of these things?
+ *
+ * "Nobody has a job queued on it" is not the same as "nothing is happening to
+ * it". A venture parked on an approval has no job, so its manager nudged it
+ * every tick, and each nudge redid the work and asked again. Waiting on a
+ * person is a state, and this is how the managers can see it.
+ *
+ * @param {...string} refIds anything an approval might point at
+ */
+export function waitingOnOwner(...refIds) {
+  const ids = refIds.flat().filter(Boolean);
+  if (!ids.length) return null;
+  return one(
+    `SELECT * FROM approvals WHERE status = 'open' AND ref_id IN (${ids.map(() => '?').join(',')}) LIMIT 1`,
+    ...ids
+  );
 }
 
 export function openApprovals() {

@@ -7,6 +7,7 @@ import { all, count, insert, one, json, update } from '../core/db.js';
 import { uid, now, slug } from '../core/util.js';
 import { log, pushState } from '../core/events.js';
 import { enqueue } from '../pipeline/queue.js';
+import { similarity, TOO_SIMILAR } from '../core/similarity.js';
 import config from '../core/config.js';
 
 export const VENTURE_STAGES = ['analysis', 'plan', 'build', 'marketing', 'live'];
@@ -83,7 +84,42 @@ export const signalCount = () => count('SELECT COUNT(*) FROM signals');
 
 // --- ventures --------------------------------------------------------------
 
+/**
+ * Ventures this shop has already thought of, closest first.
+ *
+ * The Etsy side keeps near-duplicate ideas on purpose — the owner asked for
+ * that, and the Maker varies the design. A business is not a product: two
+ * identical companies is not a range, it is the same plan written out twice.
+ * Eighteen copies of one venture is what this shop actually did, and each one
+ * ran the whole pipeline and asked to launch.
+ */
+export function existingVenture(name) {
+  const known = all('SELECT id, name, slug, stage, status FROM ventures');
+  let best = null;
+  for (const row of known) {
+    const score = similarity(name, row.name);
+    if (!best || score > best.score) best = { ...row, score };
+  }
+  return best && best.score >= TOO_SIMILAR ? best : null;
+}
+
 export function createVenture(idea) {
+  // Hand back what is already on the books rather than adding a copy of it.
+  // The caller gets a venture either way, so nothing downstream has to learn
+  // a new shape; what it does not get is a second row.
+  const already = existingVenture(idea.name);
+  if (already) {
+    log({
+      agent: 'prospector',
+      kind: 'ideas',
+      level: 'note',
+      message: `"${idea.name}" is the business already on the books as "${already.name}" — not adding it twice.`,
+      meta: { ventureId: already.id, score: Number(already.score.toFixed(2)) },
+      discord: false,
+    });
+    return getVenture(already.id);
+  }
+
   const base = slug(idea.name, 40) || 'venture';
   let candidate = base;
   let n = 2;

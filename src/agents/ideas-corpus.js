@@ -119,17 +119,31 @@ export const SEEDS = [
 ];
 
 /** Twists the Scout applies to stretch a seed into a fresh listing. */
+/**
+ * Spin-offs the Curator may propose.
+ *
+ * Every one of these has to be a thing the design engine can actually produce,
+ * because the title becomes a promise to the buyer and the Inspector checks
+ * promises against the files. Three were removed after they kept being
+ * rejected — correctly:
+ *
+ *   · "editable edition" promised typeable fields. The engine writes flat
+ *     PDFs, so this was a refund waiting to happen, and every one of these
+ *     variants sat blocked at the design stage forever.
+ *   · "US Letter edition" promised something every product already ships. A
+ *     spin-off that is identical to its parent is a listing competing with
+ *     itself for nothing.
+ *   · "bundle edition" made a bundle out of one product, which is not a
+ *     bundle. The Curator has a proper bundle path for that.
+ */
 export const TWISTS = [
   { label: 'UK edition', note: 'Monday week start, £ symbols, UK spellings and school terms.' },
-  { label: 'US Letter edition', note: 'US Letter sizing, Sunday week start, $ symbols.' },
   { label: 'ink-saver edition', note: 'Line art only, no fills, prints in black and white for pennies.' },
   { label: 'one-page edition', note: 'The whole system squeezed onto a single fridge-door page.' },
   { label: 'teen edition', note: 'Grown-up styling, no cartoon characters, language aimed at 11-16s.' },
   { label: 'dyslexia-friendly edition', note: 'Wide spacing, sans-serif, cream background, short lines.' },
   { label: 'large print edition', note: 'Big type and generous boxes for shaky hands or poor eyesight.' },
   { label: 'undated edition', note: 'No dates anywhere, so it never becomes out-of-date stock.' },
-  { label: 'bundle edition', note: 'Several related sheets sold together at a higher price point.' },
-  { label: 'editable edition', note: 'Fields the buyer can type into before printing.' },
 ];
 
 export const CATEGORIES = [...new Set(SEEDS.map((s) => s.c))];

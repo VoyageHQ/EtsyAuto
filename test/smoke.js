@@ -157,7 +157,15 @@ for (const product of products) {
   const listing = getListing(product.id);
 
   console.log(`\n  ${product.sku} — ${product.title}`);
-  check('   reached the ready stage or beyond', ['ready', 'listed'].includes(product.stage), product.stage);
+  // A product the Inspector sent back is a working gate, not a broken
+  // pipeline — it is parked on an answer from the owner, which is the design.
+  // Only an unexplained stall counts against the run.
+  const sentBack = openApprovals().some((a) => a.ref_id === product.id && a.kind === 'question');
+  check(
+    '   reached the ready stage or beyond',
+    ['ready', 'listed'].includes(product.stage) || sentBack,
+    sentBack ? 'sent back by the Inspector' : product.stage
+  );
   check('   produced at least one PDF', pdfs.length >= 1);
   check('   produced listing images', mockups.length >= 3, `${mockups.length}`);
   check('   has a price', Number(product.price) > 0, String(product.price));
@@ -445,6 +453,62 @@ console.log('\nThe venture arm');
 
   const campaignAsk = openApprovals().find((a) => a.kind === 'campaign');
   check('it asks before launching', Boolean(campaignAsk));
+
+  // --- and it only asks once --------------------------------------------
+  // The heads-up panel reached 33 items, 18 of them the same sentence about
+  // the same venture. Three things had to be wrong at once, so all three are
+  // held here: the question repeated, the manager re-drove work that was
+  // waiting on a person, and the same business was invented over and over.
+  {
+    const { ask, waitingOnOwner } = await import('../src/core/approvals.js');
+    const openBefore = openApprovals().length;
+    const twin = ask({
+      kind: campaignAsk.kind,
+      refId: 'a-brand-new-ref',
+      title: campaignAsk.title,
+      agent: 'marketer',
+    });
+    check('the same question is not asked twice while it is open', openApprovals().length === openBefore, `${openApprovals().length} vs ${openBefore}`);
+    check('   and the caller is handed the one already waiting', twin === campaignAsk.id);
+    check('a manager can see that something is waiting on you', Boolean(waitingOnOwner(campaignAsk.ref_id)));
+    check('   and does not see one for something nobody asked about', !waitingOnOwner('nothing-like-this'));
+
+    // Eight rounds of both foremen. Before the fix each round produced a fresh
+    // launch pack and a fresh question for every venture parked on an answer.
+    const harbourmaster = getAgent('harbourmaster');
+    const manager = getAgent('manager');
+    const ventureCount = () => count("SELECT COUNT(*) FROM ventures WHERE status != 'abandoned'");
+    const before = { asks: openApprovals().length, ventures: ventureCount() };
+    for (let i = 0; i < 8; i++) {
+      await harbourmaster.handle({ payload: {} });
+      await manager.handle({ payload: {} });
+    }
+    check(
+      'eight rounds of the foremen add no new questions',
+      openApprovals().length === before.asks,
+      `${before.asks} → ${openApprovals().length}`
+    );
+    check(
+      '   and no new ventures',
+      ventureCount() === before.ventures,
+      `${before.ventures} → ${ventureCount()}`
+    );
+  }
+
+  // The same business, proposed again, is recognised rather than duplicated.
+  {
+    const { createVenture, existingVenture } = await import('../src/ventures/pipeline.js');
+    const known = all("SELECT name FROM ventures WHERE status != 'abandoned' LIMIT 1")[0];
+    if (known) {
+      const total = () => count('SELECT COUNT(*) FROM ventures');
+      const before = total();
+      const same = createVenture({ name: known.name, oneLiner: 'x', problem: 'x', audience: 'x', solution: 'x' });
+      check('the same business is not put on the books twice', total() === before, `${before} → ${total()}`);
+      check('   and the existing one is handed back', same?.name === known.name);
+      check('   a reworded version counts as the same too', Boolean(existingVenture(`${known.name} Pro`)));
+      check('   while something genuinely different does not', !existingVenture('Kiln Repair Scheduling For Potters'));
+    }
+  }
 
   // The two businesses must not read each other's data.
   check(

@@ -9,6 +9,7 @@ import {
   unusedSignals,
   markUsed,
   createVenture,
+  existingVenture,
   listVentures,
   signalCount,
 } from '../ventures/pipeline.js';
@@ -105,13 +106,30 @@ What you never do:
       return { result: { added, proposed: 0 } };
     }
 
+    // createVenture hands back the existing business when it recognises one,
+    // so count what genuinely landed rather than how many were shaped —
+    // otherwise "5 new ideas" is a report about work that did not happen.
+    const fresh = [];
     for (const idea of shaped) {
+      const before = existingVenture(idea.name);
       createVenture(idea);
       markUsed(idea.signalIds || []);
+      if (!before) fresh.push(idea);
+    }
+
+    if (!fresh.length) {
+      this.say(
+        `Everything this batch produced is already on the books — ${shaped.length} idea(s), ` +
+          'all of them businesses you have already been shown. Nothing new to look at.',
+        { kind: 'ideas', level: 'note' }
+      );
+      this.goHome();
+      pushState('ventures');
+      return { result: { added, proposed: 0, repeats: shaped.length } };
     }
 
     // 3. "Tell me the best one." Not a list to wade through — a recommendation.
-    const best = shaped[0];
+    const best = fresh[0];
     this.say(
       `My pick: **${best.name}** — ${best.oneLiner} ` +
         `For ${best.audience}. ${money(best.monetisation.price, config.currency)} ` +
@@ -120,10 +138,10 @@ What you never do:
       { kind: 'pick', level: 'good', meta: { name: best.name } }
     );
 
-    this.askToChoose(best, shaped);
+    this.askToChoose(best, fresh);
     this.goHome();
     pushState('ventures');
-    return { result: { added, proposed: shaped.length, best: best.name } };
+    return { result: { added, proposed: fresh.length, best: best.name } };
   }
 
   askToChoose(best, shaped) {

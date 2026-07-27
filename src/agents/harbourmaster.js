@@ -9,8 +9,19 @@ import {
   activeVentureCount,
   scheduleVentureStage,
   signalCount,
+  campaignsFor,
 } from '../ventures/pipeline.js';
-import { openApprovals } from '../core/approvals.js';
+import { openApprovals, waitingOnOwner } from '../core/approvals.js';
+
+/**
+ * Is this venture already sitting on the owner's desk?
+ *
+ * An approval about a venture may point at the venture itself or at something
+ * it produced — a campaign, most often. Both mean the same thing here: do not
+ * touch it, somebody has been asked.
+ */
+const parked = (venture) =>
+  waitingOnOwner(venture.id, campaignsFor(venture.id).map((c) => c.id));
 
 const DAY = 86400000;
 
@@ -62,23 +73,27 @@ two half-built products are worth less than one finished one.`,
           "SELECT id FROM jobs WHERE status IN ('queued','running') AND payload LIKE ?",
           `%${venture.id}%`
         );
-        if (!busy) {
+        if (!busy && !parked(venture)) {
           scheduleVentureStage(venture);
           decisions.push(`moved ${venture.name} on to ${venture.stage}`);
         }
       }
     }
 
-    // 3. Nudge anything mid-build with nobody on it.
+    // 3. Nudge anything mid-build with nobody on it — and nobody means the
+    //    owner too. A venture at the marketing stage ends its job by asking
+    //    permission to launch, so it has no job queued and looks stalled. This
+    //    loop nudged it every tick: eighteen launch packs, eighteen identical
+    //    questions in heads up, for one business.
     for (const venture of listVentures("WHERE status = 'building' AND stage != 'live'")) {
       const busy = one(
         "SELECT id FROM jobs WHERE status IN ('queued','running') AND payload LIKE ?",
         `%${venture.id}%`
       );
-      if (!busy) {
-        scheduleVentureStage(venture);
-        decisions.push(`nudged ${venture.name}`);
-      }
+      if (busy) continue;
+      if (parked(venture)) continue;
+      scheduleVentureStage(venture);
+      decisions.push(`nudged ${venture.name}`);
     }
 
     // 4. Ask the Marketer how anything live is doing, weekly.
