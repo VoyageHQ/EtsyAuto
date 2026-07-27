@@ -505,8 +505,28 @@ console.log('\nThe venture arm');
       channel: 'r/freelance',
       postedAt: Date.now() - 3600000,
     },
+    {
+      // A third, because that is where the bar is.
+      //
+      // The Prospector's own knowledge says one post is an anecdote and three
+      // is a market, and there used to be a fallback that put the best of a
+      // thin batch up anyway. That fallback is how "Opus Sheet — a focused
+      // tracker for glm 5.2 vs. opus" reached a real shortlist. It is gone,
+      // so this fixture has to clear the bar the same way a real find does.
+      source: 'test',
+      externalId: 'fx3',
+      title: 'Late payers',
+      text: 'We still use a spreadsheet to chase unpaid invoices and it takes hours every month.',
+      url: 'https://example.com/3',
+      author: 'c',
+      score: 18,
+      comments: 7,
+      phrase: 'we still use a spreadsheet',
+      channel: 'r/smallbusiness',
+      postedAt: Date.now() - 7200000,
+    },
   ];
-  check('signals are stored', saveSignals(fixtures) === 2 || signalCount() >= 2);
+  check('signals are stored', saveSignals(fixtures) === 3 || signalCount() >= 3);
   check('the same post is never harvested twice', saveSignals(fixtures) === 0);
 
   // Reach, not just repetition.
@@ -541,6 +561,28 @@ console.log('\nThe venture arm');
 
   const desire = extractDesire(fixtures[0].text, fixtures[0].phrase);
   check('the actual want is extracted from the post', /chase unpaid invoices/i.test(desire), desire);
+
+  // Grouping on one shared word made "four independent posts" a lie: four
+  // posts that each happened to say "code" became four people describing the
+  // same need, and that is where the authority behind the worst shortlist
+  // entries came from. Members now have to share more than the word that
+  // grouped them.
+  {
+    // Database rows, which is what synthesise reads — signals that have been
+    // saved. Harvest-shaped objects have no `id` and every one of them collides
+    // on the same undefined key, which quietly makes the whole thing a no-op.
+    const unrelated = [
+      { id: 'u1', source: 'test', title: 'a', text: 'Is there a tool that will render code diagrams for a talk?', url: 'https://example.com/u1', phrase: 'is there a tool that', channel: 'r/a', posted_at: Date.now() },
+      { id: 'u2', source: 'test', title: 'b', text: 'Is there a tool that will compile code for an old console?', url: 'https://example.com/u2', phrase: 'is there a tool that', channel: 'r/b', posted_at: Date.now() },
+      { id: 'u3', source: 'test', title: 'c', text: 'Is there a tool that will translate code comments into French?', url: 'https://example.com/u3', phrase: 'is there a tool that', channel: 'r/c', posted_at: Date.now() },
+    ];
+    const before = synthesise(unrelated, 3);
+    check(
+      'three posts sharing one word are not three people with one problem',
+      before.length === 0,
+      before.map((v) => v.name).join(', ')
+    );
+  }
 
   const candidates = synthesise(unusedSignals(50), 3);
   check('complaints become candidate businesses', candidates.length >= 1);

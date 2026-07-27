@@ -18,6 +18,7 @@ import { closestMatch, tokens, TOO_SIMILAR } from '../core/similarity.js';
 import { setSetting } from '../core/db.js';
 import { money, truncate } from '../core/util.js';
 import { pushState } from '../core/events.js';
+import { llm } from '../core/llm.js';
 
 export class Prospector extends Agent {
   constructor() {
@@ -101,9 +102,30 @@ What you never do:
 
     const shaped = this.normalise(candidates, pool);
     if (!shaped.length) {
-      this.say('Nothing in this batch is worth your time. I will keep listening.', { kind: 'ideas' });
+      // Say which of the two things went wrong, because they need opposite
+      // responses. Nothing harvested means look somewhere else; plenty
+      // harvested and nothing shaped means the evidence is fine and the
+      // shaping is not.
+      //
+      // Offline, the shaping is pattern matching over other people's
+      // sentences, and it cannot turn "list all current windows 10 hotkeys?"
+      // into a business — it can only turn it into something that *looks*
+      // like one. Six of those on the shortlist is worse than an empty
+      // shortlist, because the owner spends an evening reading them before
+      // working out that none is real.
+      const raw = pool.length;
+      this.say(
+        llm.enabled || !raw
+          ? 'Nothing in this batch is worth your time. I will keep listening.'
+          : `I heard ${raw} real complaints this round and could not turn any of them into a business ` +
+            'worth showing you. That is my limit, not the evidence: offline I am matching patterns ' +
+            'against other people\'s sentences, and the results read like businesses without being ' +
+            'any. Set LLM_PROVIDER in .env and I will shape these properly — the evidence is already ' +
+            'on file and nothing is wasted.',
+        { kind: 'ideas', level: raw ? 'warn' : 'info' }
+      );
       this.goHome();
-      return { result: { added, proposed: 0 } };
+      return { result: { added, proposed: 0, unshaped: raw } };
     }
 
     // createVenture hands back the existing business when it recognises one,

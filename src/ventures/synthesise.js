@@ -217,8 +217,23 @@ export function synthesise(signals, wanted = 6) {
   for (const theme of themes) {
     const members = signals.filter((s) => !claimed.has(s.id) && bags.get(s.id)?.has(theme));
     if (members.length < 2) continue;
+
+    // Sharing one word is not sharing a problem.
+    //
+    // "Four independent posts" is the number the whole shortlist is judged on,
+    // and grouping on a single common word made it a lie: four posts that each
+    // said "code" became four people describing the same need. That is how
+    // "glm 5.2 vs. opus" arrived carrying four posts' worth of authority.
+    //
+    // So: the members have to have more than the trigger word in common. Two
+    // more shared content words is a low bar and it removes the worst of it —
+    // people describing the same problem reuse each other's vocabulary without
+    // trying, and people describing different problems do not.
+    const shared = sharedVocabulary(members, bags, theme, desires);
+    if (shared.length < 2) continue;
+
     members.forEach((m) => claimed.add(m.id));
-    clusters.push({ theme, members, desires });
+    clusters.push({ theme, members, desires, shared });
     if (clusters.length >= wanted * 2) break;
   }
 
@@ -237,12 +252,48 @@ export function synthesise(signals, wanted = 6) {
     .sort((a, b) => b.score - a.score);
 
   // The Prospector's knowledge pack draws the line at three independent posts:
-  // below that it is an anecdote, not a market. Honour it here rather than
-  // filling the Lighthouse with things the Analyst will only have to kill.
-  // If nothing clears the bar, the best of what there is still goes up, marked
-  // by its own evidence count — but only one, not six.
-  const strong = shaped.filter((v) => (v.evidence || []).length >= 3);
-  return (strong.length ? strong : shaped.slice(0, 1)).slice(0, wanted);
+  // below that it is an anecdote, not a market.
+  //
+  // There used to be a fallback here — if nothing cleared the bar, the best of
+  // what there was went up anyway, "marked by its own evidence count". That
+  // fallback was how "Opus Sheet — a focused tracker for glm 5.2 vs. opus"
+  // reached a shortlist. One person's passing phrase, dressed in a product
+  // name and a price, indistinguishable at a glance from a real find.
+  //
+  // An empty shortlist is a true statement about a quiet week. A shortlist of
+  // six things that read like businesses and are not costs the owner an
+  // evening and teaches them to distrust the whole list — which is the more
+  // expensive of the two by a distance.
+  return shaped.filter((v) => (v.evidence || []).length >= 3).slice(0, wanted);
+}
+
+/**
+ * Words that appear in most of a cluster, beyond the one that grouped it.
+ *
+ * The measure of whether several people are describing the same problem, and
+ * the one thing the clustering was missing.
+ */
+function sharedVocabulary(members, bags, theme, desires) {
+  const counts = new Map();
+  for (const m of members) {
+    // Only what the person actually asked for, not the whole post.
+    //
+    // The full bag carries the words of the question that found them —
+    // "is there a tool that" leaves "tool" in every member — and matching on
+    // those says nothing. Three posts asking for a tool to render, compile and
+    // translate code share "tool" and "code" and no problem whatsoever, and
+    // that pair was enough to make them a market.
+    const want = desires?.get(m.id);
+    const words = want ? new Set(desireTokens(want)) : bags.get(m.id) || [];
+    for (const word of words) {
+      if (word === theme) continue;
+      counts.set(word, (counts.get(word) || 0) + 1);
+    }
+  }
+  // In most of them, not just two — otherwise a pair inside a group of six
+  // carries the whole cluster.
+  const bar = Math.max(2, Math.ceil(members.length * 0.6));
+  return [...counts].filter(([, n]) => n >= bar).map(([word]) => word);
 }
 
 /**
@@ -277,6 +328,45 @@ function usableSubject(subject) {
   // The scaffolding of the question itself is not a want. If it survived this
   // far, extraction failed and the whole post came through unfiltered.
   if (/^(i wish|is there|are there|does anyone|anyone know|has anyone|we still use|looking for|any recommendations)\b/i.test(text)) {
+    return false;
+  }
+
+  // --- fragments of a longer sentence ------------------------------------
+  // Stack Exchange brought a new shape of source: titles that are questions
+  // rather than complaints. Those fail differently, and they failed silently
+  // — "A focused tracker for specify that these days" and "a tracker for
+  // pseudo english looking characters used" both reached the shortlist, and
+  // neither is a thing anybody would build.
+
+  // A wh-word opens a question, never a noun phrase. "how to copy from a
+  // protected" is the front of somebody's title, not the name of a market.
+  if (/^(how|what|why|when|where|which|who|whether)\b/i.test(words[0])) return false;
+
+  // A subordinator in the middle means the clause carried on past the cut.
+  // "specify that these days" is the first half of a sentence.
+  if (words.slice(1, -1).some((w) => /^(that|which|when|because|while|whether|if)$/i.test(w))) {
+    return false;
+  }
+
+  // Ending on a past participle or a bare adjective leaves the noun behind:
+  // "characters used", "a protected", "the required". Whatever it was used or
+  // protected *for* was the actual subject, and it did not survive.
+  if (/^(used|needed|required|protected|supported|allowed|enabled|missing|broken|available)$/i.test(words.at(-1))) {
+    return false;
+  }
+
+  // A determiner at the end is the same tell one word earlier.
+  if (/^(a|an|the|my|your|our|their|its)$/i.test(words.at(-1))) return false;
+
+  // Punctuation that only exists inside a longer sentence. A subject with a
+  // question mark in it came straight off somebody's title — "list all current
+  // windows 10 hotkeys?" was proposed as a business.
+  if (/[?:;!]/.test(text)) return false;
+
+  // A quantifier phrase is a statistic somebody quoted, not a thing to build.
+  // "up to tenth of amazon shoppers" is a sentence about a market, and it read
+  // as one on the shortlist.
+  if (/\b(up to|around|about|roughly|nearly|almost|over|more than|less than)\b/i.test(text)) {
     return false;
   }
 
