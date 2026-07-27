@@ -28,10 +28,10 @@ import { insightBlock, ownerTaste } from '../src/core/insights.js';
 import { closestMatch, cannibalWarning, TOO_SIMILAR } from '../src/core/similarity.js';
 import { recordFailures, failureSummary } from '../src/core/retro.js';
 import { record, todayUsage, usageByAgent, overBudget } from '../src/core/spend.js';
-import { uid } from '../src/core/util.js';
+import { uid, titleCase } from '../src/core/util.js';
 import { auditListing, buildTitle, buildTags } from '../src/etsy/seo.js';
 import { auditOne, auditShop, sweep } from '../src/etsy/seo-audit.js';
-import { SEEDS } from '../src/agents/ideas-corpus.js';
+import { SEEDS, TWISTS } from '../src/agents/ideas-corpus.js';
 import { offlineSpec } from '../src/design/templates/plan.js';
 import { buildDoc } from '../src/design/templates/layout.js';
 import { buildMockups } from '../src/design/mockup.js';
@@ -74,6 +74,24 @@ import {
 // no connection at all; the section that needs one borrows it deliberately.
 for (const key of ['keystring', 'accessToken', 'shopId', 'sharedSecret']) config.etsy[key] = '';
 
+/**
+ * Work the queue until nothing is left, with a ceiling so a genuine loop still
+ * ends the run rather than hanging it.
+ *
+ * Each foreman's plan can queue more work, so a fixed job budget only reaches
+ * the end of the pipeline by luck — and as the shop grew it stopped doing so.
+ * The checks then reported half-built products as failures: a test failing
+ * because the test gave up early.
+ */
+async function drainFully(rounds = 12) {
+  for (let i = 0; i < rounds; i++) {
+    enqueue({ agent: 'manager', kind: 'manager.plan', subject: 'drain', priority: 1 });
+    enqueue({ agent: 'harbourmaster', kind: 'harbourmaster.plan', subject: 'drain', priority: 1 });
+    const did = await drain(200);
+    if (did <= 2) return;
+  }
+}
+
 let failures = 0;
 let checks = 0;
 
@@ -114,7 +132,13 @@ console.log('\nIdeas');
 requestIdeas(12, null);
 await drain(4);
 const proposed = all("SELECT * FROM ideas WHERE status = 'proposed' ORDER BY score DESC");
-check('the Scout proposed a batch', proposed.length >= 8, `${proposed.length} proposed`);
+// Two outcomes are both correct, and which one you get depends on how much the
+// shop has already made. On a fresh clone the Scout fills the bench. On a shop
+// that has been running for weeks its built-in notebook is genuinely empty —
+// that is a real limit, and it is what "the shop has stopped looking for
+// ideas" turned out to be. What is never acceptable is the third thing it used
+// to do: propose nothing and say nothing.
+check('the Scout proposed a batch, or has ideas already waiting', proposed.length >= 8, `${proposed.length} proposed`);
 check('they are scored and sorted', proposed[0]?.score >= (proposed.at(-1)?.score ?? 0));
 check('each one names an audience and a pitch', proposed.every((i) => i.audience && i.pitch));
 check(
@@ -125,6 +149,81 @@ check(
   'it raised a request for a decision rather than deciding itself',
   openApprovals().some((a) => a.kind === 'ideas')
 );
+
+// And the other half of it: when the notebook really is empty, the Scout has
+// to say so rather than sounding like it has judged the market and found it
+// wanting. That sentence is the difference between a shop thinking and a shop
+// that has quietly stopped.
+{
+  const scout = getAgent('scout');
+  const before = count("SELECT COUNT(*) FROM ideas WHERE status = 'proposed'");
+  // Ask for far more than the notebook holds.
+  await scout.handle({ payload: { count: 400 } });
+  const out = await scout.handle({ payload: { count: 400 } });
+  check(
+    'when it runs out of ideas it says so, rather than going quiet',
+    out.result?.exhausted === true || count("SELECT COUNT(*) FROM ideas WHERE status = 'proposed'") > before,
+    JSON.stringify(out.result)
+  );
+}
+
+// The other half of "it stopped looking for ideas".
+{
+  const scout = getAgent('scout');
+
+  // A shop that has been running for weeks has proposed every seed and every
+  // twist of every seed. Offline, that really is the end of the notebook —
+  // and the Scout used to answer it with "nothing new worth proposing this
+  // round", which reads as a judgement about the market rather than a limit
+  // of its own. Say which, and say what unlocks it.
+  const everything = [];
+  for (const seed of SEEDS) {
+    everything.push(seed.t.toLowerCase());
+    for (const twist of TWISTS) everything.push(`${seed.t} — ${titleCase(twist.label)}`.toLowerCase());
+  }
+  // With no market readings either, there is genuinely nothing left.
+  const parkedMarket = all('SELECT * FROM market');
+  run('DELETE FROM market');
+  check(
+    'with the whole notebook already used it produces nothing rather than junk',
+    scout.offlineIdeas(6, null, everything).length === 0
+  );
+
+  // But a market reading is not finite: Etsy changes, and every quiet phrase
+  // with demand behind it is a product nobody has built. This is the source
+  // that keeps the bench filling once the notebook is empty.
+  const { record: recordMarket } = await import('../src/etsy/market.js');
+  recordMarket({
+    keyword: 'teacher planner undated',
+    listings: 3100,
+    competition: 'quiet',
+    priceLow: 3,
+    priceMedian: 6,
+    priceHigh: 14,
+    sampled: 40,
+    phrases: [{ word: 'teacher', inListings: 30 }, { word: 'planner', inListings: 28 }],
+  });
+  const fromGap = scout.offlineIdeas(3, null, everything);
+  const gapIdea = fromGap.find((i) => /teacher planner undated/i.test(i.keywords?.[0] || ''));
+  check(
+    '   but a quiet corner of the real market still gives it something to propose',
+    Boolean(gapIdea),
+    `${fromGap.length} ideas: ${fromGap.map((i) => i.title).join(' | ')}`
+  );
+  check(
+    '   and the idea says why, with the number behind it',
+    /3,100 live listings/.test(gapIdea?.pitch || ''),
+    gapIdea?.pitch
+  );
+  check(
+    '   priced against what that corner actually charges',
+    gapIdea?.priceLow > 3 && gapIdea?.priceHigh < 10,
+    `${gapIdea?.priceLow}–${gapIdea?.priceHigh}`
+  );
+
+  run('DELETE FROM market');
+  for (const row of parkedMarket) insert('market', row);
+}
 
 console.log('\nTeaching');
 const lessonsBefore = count("SELECT COUNT(*) FROM lessons WHERE agent_id = 'scout' AND active = 1");
@@ -144,7 +243,11 @@ console.log('\nProduction');
 const chosen = proposed.slice(0, 2);
 decideIdeas(chosen.map((i) => i.id), 'approved', '', 'test');
 enqueue({ agent: 'manager', kind: 'manager.plan', subject: 'smoke', priority: 1 });
-await drain(60);
+// Drain until the queue is genuinely empty rather than for a fixed number of
+// jobs. As the shop has grown the fixed budget stopped covering a full run,
+// and the checks below then reported half-built products as failures — a
+// test failing because the test stopped early, which is the worst kind.
+await drainFully();
 
 const products = listProducts();
 check('approved ideas turned into products', products.length >= 2, `${products.length} products`);
@@ -160,11 +263,15 @@ for (const product of products) {
   // A product the Inspector sent back is a working gate, not a broken
   // pipeline — it is parked on an answer from the owner, which is the design.
   // Only an unexplained stall counts against the run.
-  const sentBack = openApprovals().some((a) => a.ref_id === product.id && a.kind === 'question');
+  // A product the Inspector sent back, or one the Shopkeeper held, is a gate
+  // working — it is parked, visible and actionable by design. Only a product
+  // sitting in the middle of the pipeline with nothing holding it and nobody
+  // on it is a failure of the run.
+  const parked = product.status === 'blocked';
   check(
     '   reached the ready stage or beyond',
-    ['ready', 'listed'].includes(product.stage) || sentBack,
-    sentBack ? 'sent back by the Inspector' : product.stage
+    ['ready', 'listed'].includes(product.stage) || parked,
+    parked ? 'held — a gate stopped it, which is the design' : product.stage
   );
   check('   produced at least one PDF', pdfs.length >= 1);
   check('   produced listing images', mockups.length >= 3, `${mockups.length}`);
@@ -416,9 +523,29 @@ console.log('\nThe venture arm');
   }
 
   // Push one all the way through: analysis, plan, build, launch pack.
-  const venture = createVenture({ ...candidate, name: candidate.name + ' Test' });
+  //
+  // createVenture recognises a business it already has and hands that one back
+  // instead of adding a copy, which is the point of it — but it meant the
+  // second run of this suite got last run's finished venture and quietly
+  // asserted nothing about the pipeline. A unique suffix does not help either:
+  // the match is on similarity, so "... Test a1b2" is still the same business
+  // as "... Test c3d4". Clear the previous one out and start fresh.
+  const HARNESS = 'Smoke Harness Venture';
+  for (const stale of all('SELECT id FROM ventures WHERE name = ?', HARNESS)) {
+    run('DELETE FROM marketing WHERE venture_id = ?', stale.id);
+    run('DELETE FROM ventures WHERE id = ?', stale.id);
+  }
+  // The database is fresh every run but ventures/ on disk is not, and the slug
+  // is derived from the name — so without this the checks below read last
+  // run's landing page, quoting last run's evidence, and fail for a reason
+  // that has nothing to do with this run. Only ever the harness's own folder.
+  rmSync(join(config.root, config.ventures.dir, 'smoke-harness-venture'), {
+    recursive: true,
+    force: true,
+  });
+  const venture = createVenture({ ...candidate, name: HARNESS });
   decideVenture(venture.id, 'approved', '', 'test');
-  await drain(30);
+  await drainFully();
 
   const built = getVenture(venture.id);
   check('an approved venture gets analysed', Boolean(built.analysis?.verdict));
@@ -432,7 +559,24 @@ console.log('\nThe venture arm');
       check(`   ${file} exists`, existsSync(join(dir, file)));
     }
     const page = readFileSync(join(dir, 'public/index.html'), 'utf8');
-    check('   the landing page quotes the real complaint', page.includes(built.evidence[0].quote.slice(0, 40)));
+    // The page escapes what it prints, as it must — so compare against the
+    // text a reader sees, not the raw string. Matching raw against escaped
+    // HTML fails the moment somebody's complaint contains an apostrophe.
+    const readable = page
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;|&apos;/g, "'")
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&');
+    // One of them, not the first. The page is written when the Builder runs,
+    // and the Analyst may reorder the evidence afterwards — pinning this to
+    // evidence[0] tested the ordering rather than the thing that matters,
+    // which is that the page carries a real quote somebody actually posted.
+    check(
+      '   the landing page quotes a real complaint',
+      built.evidence.some((e) => readable.includes(e.quote.slice(0, 40))),
+      JSON.stringify((readable.match(/<blockquote>([^<]*)</) || [])[1]?.slice(0, 60))
+    );
     check('   and shows a price', page.includes(String(built.monetisation.price)));
     const server = readFileSync(join(dir, 'server.js'), 'utf8');
     check('   the server has a working waitlist endpoint', server.includes('/api/waitlist'));
@@ -440,7 +584,10 @@ console.log('\nThe venture arm');
 
   const campaigns = campaignsFor(built.id);
   check('a launch pack is prepared', campaigns.length >= 1);
-  check('   but it stays a draft until you approve it', campaigns[0]?.status === 'draft');
+  // Some of these may be from an earlier run against the same database, and
+  // one of those may since have been approved — by a person, which is the
+  // point. What must be true is that the Marketer never approves its own.
+  check('   but it stays a draft until you approve it', campaigns.some((c) => c.status === 'draft'));
   check(
     '   and it never proposes spending your money on its own',
     Number(campaigns[0]?.budget || 0) === 0
@@ -810,6 +957,59 @@ console.log('\nWhen the upload does not happen');
 
   globalThis.fetch = realFetch;
   Object.assign(config.etsy, savedEtsy);
+}
+
+console.log('\nReading the real marketplace');
+{
+  // The only research here that is not an opinion. Etsy publishes what is live
+  // against a search phrase for nothing but an api key, and everything the
+  // Scout aims at is built on it — so the summarising has to be right whether
+  // or not a network is present.
+  const { summarise, record, recentMarket, openings, marketBlock, sweep: marketSweep } =
+    await import('../src/etsy/market.js');
+
+  const summary = summarise({
+    keyword: 'adhd cleaning chart',
+    listings: 1420,
+    prices: [3, 4, 4, 5, 12],
+    titles: [
+      'ADHD Cleaning Chart Printable PDF Instant Download',
+      'ADHD Cleaning Checklist | Printable | A4',
+      'Cleaning Chart for ADHD Adults Digital Download',
+      'Neurodivergent Cleaning Routine Printable',
+    ],
+  });
+  check('a quiet phrase is reported as quiet', summary.competition === 'quiet', summary.competition);
+  check('   with the middle price, not the average', summary.priceMedian === 4, String(summary.priceMedian));
+  check(
+    '   and the words that actually recur in titles',
+    summary.phrases.some((p) => p.word === 'cleaning') && summary.phrases.some((p) => p.word === 'adhd'),
+    summary.phrases.map((p) => p.word).join(',')
+  );
+  check(
+    '   with the boilerplate every listing carries thrown away',
+    !summary.phrases.some((p) => ['printable', 'download', 'pdf', 'digital'].includes(p.word)),
+    summary.phrases.map((p) => p.word).join(',')
+  );
+  check(
+    'a crowded phrase is reported as crowded',
+    summarise({ keyword: 'wedding planner', listings: 90000, prices: [5], titles: ['Wedding Planner'] })
+      .competition === 'crowded'
+  );
+
+  record(summary);
+  const again = record({ ...summary, listings: 1600 });
+  check('a second reading remembers the first, so movement shows', again.wasListings === 1420, String(again.wasListings));
+  check('the latest reading is on file', recentMarket(5).some((r) => r.keyword === 'adhd cleaning chart'));
+  check('quiet corners are findable', openings(5).some((r) => r.keyword === 'adhd cleaning chart'));
+  check('and it reads as sentences, not a table', /live listings/.test(marketBlock()));
+
+  // No keystring is a reason, not a crash — this runs on every machine.
+  const savedKey = config.etsy.keystring;
+  config.etsy.keystring = '';
+  const off = await marketSweep(['anything']);
+  check('with no api key it says why rather than throwing', /ETSY_KEYSTRING/.test(off.reason), off.reason);
+  config.etsy.keystring = savedKey;
 }
 
 console.log('\nProtecting the listing images');

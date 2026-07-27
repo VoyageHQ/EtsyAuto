@@ -9,6 +9,8 @@ import { catalogue, closestMatch, tokens, TOO_SIMILAR } from '../core/similarity
 import { matchesAvoidPattern, findTrademarks, tidyPrice, bandFor } from '../knowledge/apply.js';
 import config from '../core/config.js';
 import { pushState } from '../core/events.js';
+import { marketBlock, openings } from '../etsy/market.js';
+import { llm } from '../core/llm.js';
 
 export class Scout extends Agent {
   constructor() {
@@ -58,9 +60,23 @@ only if it is unusually uncontested.`,
 
     const list = this.normalise(ideas, existing).slice(0, wanted);
     if (!list.length) {
-      this.say('Nothing new worth proposing this round.', { kind: 'ideas' });
+      // "Nothing worth proposing" sounds like a judgement about the market.
+      // It is almost always a limit of mine, and saying which one is the
+      // difference between "the shop is thinking" and "the shop has stopped".
+      const gaps = openings(1).length;
+      this.say(
+        llm.enabled
+          ? 'Nothing new this round — everything I thought of is already on the bench.'
+          : `I am out of new ideas offline. I have proposed every product in my built-in ` +
+            `notebook and every variation of them, ${existing.length} in all. ` +
+            (gaps
+              ? 'Fresh market readings will give me new gaps to aim at within the hour.'
+              : 'Set LLM_PROVIDER in .env, or add ETSY_KEYSTRING so I can read the real ' +
+                'marketplace and find gaps nobody has filled.'),
+        { kind: 'ideas', level: 'warn' }
+      );
       this.goHome();
-      return { result: { added: 0 } };
+      return { result: { added: 0, exhausted: true } };
     }
 
     const batch = uid('batch');
@@ -133,6 +149,12 @@ ${theme ? `The owner specifically asked you to focus on: ${theme}\n` : ''}Right 
 Categories the shop already works in (you may go outside them if you have a
 genuinely good reason): ${CATEGORIES.join(', ')}.
 
+${marketBlock() || 'No market reading yet, so judge demand on your own reasoning.'}
+
+Where a phrase is crowded, a new listing is invisible however good it is.
+Aim at the quiet ones, or at something specific enough that the crowded phrase
+is not the one it competes on.
+
 Do NOT propose anything that duplicates these existing ideas:
 ${recent.length ? recent.map((t) => `- ${t}`).join('\n') : '- (nothing yet)'}
 
@@ -157,15 +179,71 @@ Return a JSON array. Each element:
    * then seeds stretched with a twist. Deterministic enough to be useful,
    * random enough to stay interesting.
    */
+  /**
+   * Ideas built from what the market actually looks like.
+   *
+   * The seed corpus is finite. Once the shop has proposed every seed and every
+   * twist of every seed — which a shop running day and night reaches inside a
+   * week — the offline Scout has nothing left to say, and "nothing new worth
+   * proposing this round" starts to read as the shop giving up. It had.
+   *
+   * The market readings are not finite: they change as Etsy changes, and each
+   * quiet phrase with real demand behind it is a product nobody has built yet.
+   * That makes this the one offline source that renews itself.
+   */
+  fromMarket(wanted, seen) {
+    const out = [];
+    for (const gap of openings(12)) {
+      if (out.length >= wanted) break;
+      // The words other sellers use in this corner, minus the ones the phrase
+      // already contains — that is the shape of what buyers expect to see.
+      const extra = gap.phrases
+        .map((p) => p.word)
+        .filter((w) => !gap.keyword.includes(w))
+        .slice(0, 3);
+      const title = titleCase(`${gap.keyword}${extra[0] ? ` ${extra[0]}` : ''} printable`);
+      if (seen.has(title.toLowerCase())) continue;
+      seen.add(title.toLowerCase());
+
+      const seed = SEEDS.find((s) => gap.keyword.includes(s.c.toLowerCase().split(' ')[0])) || null;
+      const price = gap.priceMedian || 4;
+      out.push({
+        title,
+        category: seed?.c || 'Printables',
+        audience: seed?.a || `people searching Etsy for "${gap.keyword}"`,
+        pitch:
+          `Only ${gap.listings.toLocaleString()} live listings for "${gap.keyword}", which is quiet ` +
+          `enough for a new one to be seen. Typical price is ${price.toFixed(2)}.`,
+        angle: extra.length
+          ? `Sellers in this corner all use "${extra.join('", "')}" — match that language and be findable.`
+          : 'A corner of Etsy nobody has crowded out yet.',
+        format: seed?.f || 'printable PDF pack',
+        keywords: [gap.keyword, ...extra].slice(0, 6),
+        effort: seed?.e ?? 2,
+        // A quiet phrase with a thousand listings behind it has proven demand;
+        // a quiet phrase with fifty has none. That is the whole judgement.
+        demand: gap.listings > 2000 ? 4 : gap.listings > 500 ? 3 : 2,
+        priceLow: Math.max(1.5, price * 0.7),
+        priceHigh: Math.max(2.5, price * 1.4),
+        fromMarket: true,
+      });
+    }
+    return out;
+  }
+
   offlineIdeas(wanted, theme, existing) {
     const seen = new Set(existing);
+
+    // Real gaps first, because they are the only ones backed by evidence.
+    const out0 = theme ? [] : this.fromMarket(wanted, seen);
+    if (out0.length >= wanted) return out0;
     const pool = theme
       ? SEEDS.filter((s) =>
           `${s.t} ${s.c} ${s.a} ${s.k.join(' ')}`.toLowerCase().includes(theme.toLowerCase())
         )
       : SEEDS;
     const seeds = shuffle(pool.length ? pool : SEEDS);
-    const out = [];
+    const out = [...out0];
 
     for (const seed of seeds) {
       if (out.length >= wanted) break;

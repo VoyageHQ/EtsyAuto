@@ -84,13 +84,21 @@ export function mayUpload(listing) {
 
   const recent = uploadsInLastHour();
   if (recent >= config.etsy.maxUploadsPerHour) {
+    // Say when it clears. "You have hit a limit" with no end to it reads like
+    // a permanent refusal, and the owner goes looking for a bug that is not
+    // there — which is exactly what happened when this was set at six.
+    const oldest = one(
+      'SELECT MIN(uploaded_at) AS t FROM listings WHERE IFNULL(uploaded_at, 0) > ?',
+      now() - HOUR
+    );
+    const mins = Math.max(1, Math.ceil((Number(oldest?.t || now()) + HOUR - now()) / 60000));
     return {
       allowed: false,
       code: 'rate-limit',
       why:
-        `${recent} listings have gone up in the last hour, which is the limit. Something is ` +
-        'probably wrong rather than busy. Raise ETSY_MAX_UPLOADS_PER_HOUR in .env if this is ' +
-        'genuinely what you wanted.',
+        `${recent} listings have gone up in the last hour, which is the ceiling. This one goes ` +
+        `automatically in about ${mins} minute(s), when the hour rolls on. Raise ` +
+        'ETSY_MAX_UPLOADS_PER_HOUR in .env if you want more at once.',
     };
   }
 

@@ -7,6 +7,8 @@ import { cannibalWarning } from '../core/similarity.js';
 import { seasonHint } from './scout.js';
 import config from '../core/config.js';
 import { suggestPrice } from '../etsy/listing.js';
+import { sweep, keywordsToCheck, marketBlock } from '../etsy/market.js';
+import { money } from '../core/util.js';
 
 const MODIFIERS = [
   'printable',
@@ -29,7 +31,7 @@ export class Researcher extends Agent {
       title: 'keyword and market watcher',
       station: 'lookout',
       colour: '#8fb8d8',
-      handles: ['researcher.validate', 'researcher.trends'],
+      handles: ['researcher.validate', 'researcher.trends', 'researcher.market'],
       voice: 'Factual and cautious. Says "I think" when it is guessing, and says when it does not know.',
       purpose: `
 You work out what buyers are really searching for and what the shop can
@@ -44,7 +46,43 @@ figures get the shop into trouble.`,
 
   async handle(job) {
     if (job.kind === 'researcher.trends') return this.trends();
+    if (job.kind === 'researcher.market') return this.market(job);
     return this.validate(job);
+  }
+
+  /**
+   * Go and read the actual marketplace.
+   *
+   * Everything else this agent does is a guess — a model's opinion, or a
+   * built-in heuristic. Etsy publishes what is live against a search phrase
+   * for nothing but an api key, and that is the only thing here that is not
+   * an opinion: how many people are already selling this, what they charge,
+   * and which words are in the titles that rank.
+   */
+  async market(job) {
+    this.moveTo('lookout', 'reading the market');
+    const keywords = job.payload?.keywords?.length ? job.payload.keywords : keywordsToCheck();
+    const { checked, failed, reason } = await sweep(keywords);
+
+    if (!checked.length) {
+      this.say(
+        reason || `Etsy would not answer for any of ${keywords.length} phrase(s). ${failed[0]?.why || ''}`,
+        { kind: 'market', level: 'warn', discord: false }
+      );
+      this.goHome();
+      return { result: { checked: 0, reason } };
+    }
+
+    const quietest = [...checked].sort((a, b) => a.listings - b.listings)[0];
+    this.say(
+      `Read ${checked.length} phrase(s) off Etsy. Quietest is "${quietest.keyword}" with ` +
+        `${quietest.listings.toLocaleString()} live listings at about ` +
+        `${money(quietest.price_median, config.currency)} — that is where a new listing gets seen.` +
+        (failed.length ? ` ${failed.length} would not load.` : ''),
+      { kind: 'market', level: 'good', meta: { checked: checked.length } }
+    );
+    this.goHome();
+    return { result: { checked: checked.length, failed: failed.length } };
   }
 
   async validate(job) {

@@ -346,13 +346,17 @@ export async function relist(productId) {
   // job is still queued cannot produce two listings.
   grantUpload(listing.id, 'send-to-etsy');
 
+  // unique, deliberately. Pressing "send to etsy" five times because nothing
+  // seems to be happening used to queue five jobs: the first spent the
+  // permission and the other four each reported "you have not approved this
+  // one" about a product you had just approved five times. One press, one job
+  // — and if one is already waiting, this press just refreshes its permission.
   enqueue({
     agent: 'lister',
     kind: 'lister.publish',
     subject: `re-draft ${product.sku}`,
     payload: { productId },
     priority: 2,
-    unique: false,
   });
 
   log({

@@ -4,6 +4,7 @@
 
 # local state
 data/*.db
+data/test/
 data/*.db-journal
 data/*.db-wal
 data/*.db-shm

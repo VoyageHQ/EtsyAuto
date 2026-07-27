@@ -105,6 +105,37 @@ const apiKey = () =>
 const wantsSharedSecret = (status, text) =>
   status === 403 && /shared secret is required/i.test(String(text));
 
+/**
+ * A read of Etsy's public data, using the api key and nothing else.
+ *
+ * Some of the most useful things here — what is already listed against a
+ * keyword, what it costs, how crowded it is — are public, and asking for them
+ * does not need a shop, a token or a sign-in. Keeping that on its own path
+ * means market research works for somebody who has pasted in a keystring and
+ * got no further, which is most people on their first evening.
+ *
+ * @throws with Etsy's own words, so a caller can report rather than guess.
+ */
+export async function publicCall(path) {
+  if (!config.etsy.keystring) throw new Error('ETSY_KEYSTRING is empty in .env.');
+
+  const attempt = (key) => fetch(`${BASE}${path}`, { headers: { 'x-api-key': key } });
+
+  let res = await attempt(apiKey());
+  let text = await res.text();
+  if (wantsSharedSecret(res.status, text) && config.etsy.sharedSecret) {
+    setSetting('etsy_api_key_form', 'combined');
+    res = await attempt(combinedKey());
+    text = await res.text();
+  }
+  if (!res.ok) {
+    const err = new Error(`Etsy GET ${path} → ${res.status}: ${text.slice(0, 200)}`);
+    err.status = res.status;
+    throw err;
+  }
+  return text ? JSON.parse(text) : {};
+}
+
 async function call(path, { method = 'GET', body, headers = {}, raw } = {}) {
   const token = await accessToken();
 

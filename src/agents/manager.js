@@ -2,10 +2,11 @@
 // itself. Runs on every tick from the Office.
 import Agent from './base.js';
 import config from '../core/config.js';
-import { all, count, getSetting, setSetting, insert, one } from '../core/db.js';
+import { all, count, getSetting, setSetting, insert, one, update } from '../core/db.js';
 import { enqueue } from '../pipeline/queue.js';
 import { createProductFromIdea, listProducts, activeProductCount, scheduleStage } from '../pipeline/products.js';
 import { openApprovals, waitingOnOwner } from '../core/approvals.js';
+import { awaitingUpload } from '../etsy/permission.js';
 import { uid, now, titleCase } from '../core/util.js';
 import { rulesFor } from '../knowledge/index.js';
 import { seasonHint } from './scout.js';
@@ -36,18 +37,50 @@ do not go near it.`,
     this.moveTo('office', 'planning');
     const decisions = [];
 
-    // 1. Keep ideas flowing until the owner's backlog is full.
-    const waiting = count("SELECT COUNT(*) FROM ideas WHERE status = 'proposed'");
-    if (waiting < config.ideaBacklogTarget) {
-      const wanted = Math.min(10, config.ideaBacklogTarget - waiting);
+    // 1. Keep ideas coming, and keep the pile the same size.
+    //
+    //    This used to stop dead once the backlog hit its target, which is how
+    //    a shop with 373 unranked ideas looked like a shop that had given up
+    //    looking. Stopping is the wrong answer to a full pile: the owner wants
+    //    the best ideas in front of them, not the first ones that happened to
+    //    be thought of. So the Scout keeps working on a timer, and the weakest
+    //    of the pile makes way for anything better.
+    //
+    //    Nothing is lost — shelved ideas stay in the Library and can be
+    //    brought back — and the target is one line of .env.
+    const lastAsk = Number(getSetting('last_idea_ask', '0'));
+    if (Date.now() - lastAsk > Math.max(1, config.ideaAskMinutes) * 60000) {
+      setSetting('last_idea_ask', String(Date.now()));
       enqueue({
         agent: 'scout',
         kind: 'scout.brainstorm',
-        subject: `${wanted} fresh ideas`,
-        payload: { count: wanted, theme: this.currentTheme() },
+        subject: 'fresh ideas',
+        payload: { count: 6, theme: this.currentTheme() },
         priority: 6,
       });
-      decisions.push(`asked the Scout for ${wanted} more ideas`);
+      decisions.push('asked the Scout for more ideas');
+    }
+
+    const waiting = count("SELECT COUNT(*) FROM ideas WHERE status = 'proposed'");
+    const over = waiting - config.ideaBacklogTarget;
+    if (over > 0) {
+      // Weakest first, and oldest as the tie-break, so a good idea does not
+      // get shelved just for having arrived early.
+      const weakest = all(
+        `SELECT id FROM ideas WHERE status = 'proposed'
+          ORDER BY score ASC, created_at ASC LIMIT ?`,
+        Math.min(over, 12)
+      );
+      for (const idea of weakest) {
+        update('ideas', idea.id, {
+          status: 'shelved',
+          decided_at: now(),
+          note:
+            'Shelved to keep the shortlist to the best ' +
+            `${config.ideaBacklogTarget}. Nothing is lost — it is in the Library, and you can bring it back.`,
+        });
+      }
+      decisions.push(`shelved ${weakest.length} weaker idea(s) to keep the shortlist sharp`);
     }
 
     // 2. Start approved ideas, a few at a time.
@@ -78,12 +111,49 @@ do not go near it.`,
       decisions.push(`nudged ${product.sku} at the ${product.stage} stage`);
     }
 
+    // 3b. Anything you have approved for Etsy that has not gone up yet.
+    //
+    //     A permission is one-shot, so re-queueing cannot duplicate a listing
+    //     — and without this an upload that lost its job, or one held back by
+    //     the hourly ceiling, waited forever while the Shopfront said it was
+    //     on its way. Making that sentence true is the whole point.
+    for (const listing of awaitingUpload()) {
+      const busy = one(
+        "SELECT id FROM jobs WHERE status IN ('queued','running') AND payload LIKE ?",
+        `%${listing.product_id}%`
+      );
+      if (busy) continue;
+      enqueue({
+        agent: 'lister',
+        kind: 'lister.publish',
+        subject: `${listing.sku} ${listing.product_title}`,
+        payload: { productId: listing.product_id },
+        priority: 3,
+      });
+      decisions.push(`sending ${listing.sku} to Etsy`);
+    }
+
     // 4. Let the Lookout have a look round once a day.
     const lastScan = Number(getSetting('last_trend_scan', '0'));
     if (Date.now() - lastScan > DAY) {
       setSetting('last_trend_scan', String(Date.now()));
       enqueue({ agent: 'researcher', kind: 'researcher.trends', subject: 'daily scan', priority: 7 });
       decisions.push('sent the Researcher up the Lookout');
+    }
+
+    // 4b. And read the actual marketplace, on a much shorter cycle.
+    //
+    //     This is the only research here that is not an opinion: Etsy's own
+    //     live listings for the phrases this shop is betting on. It runs every
+    //     few hours rather than daily because it is what the Scout's next
+    //     batch of ideas is built on, and a day-old reading means a day of
+    //     ideas aimed at the wrong gaps.
+    const lastMarket = Number(getSetting('last_market_scan', '0'));
+    const marketEvery = Math.max(0.25, config.marketScanHours) * 3600000;
+    if (config.etsy.keystring && Date.now() - lastMarket > marketEvery) {
+      setSetting('last_market_scan', String(Date.now()));
+      enqueue({ agent: 'researcher', kind: 'researcher.market', subject: 'reading the market', priority: 6 });
+      decisions.push('sent the Researcher to read the market');
     }
 
     // 5. Let the Curator look for bundles and spin-offs once a day, but only

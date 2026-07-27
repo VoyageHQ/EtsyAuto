@@ -22,6 +22,7 @@ import { listProducts, getListing, assetsFor } from '../pipeline/products.js';
 import { llm } from '../core/llm.js';
 import { etsyEnabled, connectionGaps, whyNotConnected } from '../etsy/api.js';
 import { awaitingUpload, uploadsInLastHour } from '../etsy/permission.js';
+import { recentMarket, openings } from '../etsy/market.js';
 import { insightsSummary } from '../core/insights.js';
 import { todayUsage, usageByAgent } from '../core/spend.js';
 import { failureSummary } from '../core/retro.js';
@@ -83,6 +84,11 @@ const daysLeft = (ts) => {
 
 export function buildState() {
   const counts = stationCounts();
+  // Read once. Asked inside the map it becomes one query per product, on a
+  // payload that is rebuilt every time anything changes.
+  const waitingOn = new Set(
+    openApprovals().filter((a) => a.kind === 'listing').map((a) => a.ref_id)
+  );
   const products = listProducts().map((p) => {
     const listing = getListing(p.id);
     return {
@@ -105,8 +111,16 @@ export function buildState() {
             status: listing.status,
             etsyListingId: listing.etsy_listing_id,
             exportPath: listing.export_path,
+            // What the Shopfront needs to tell "you have said yes and it is
+            // on its way" apart from "nobody has asked you yet".
+            uploadOkAt: listing.upload_ok_at,
+            uploadedAt: listing.uploaded_at,
           }
         : null,
+      // The Inspector's question, if there is one open about this product.
+      // Without it the Shopfront cannot show what is waiting on you, which is
+      // the first thing anyone wants to know when they open it.
+      awaitingApproval: waitingOn.has(p.id),
     };
   });
 
@@ -213,7 +227,20 @@ export function buildState() {
       })),
     // The Signwriter's last sweep. Kept whole because the panel shows every
     // finding and there are rarely many.
-    seo: json(getSetting('seo_report'), null),
+    // The Signwriter's full sweep is every finding for every listing, which
+    // grows with the catalogue and rides on every push. The panel reads the
+    // counts and works down the worst first, so send those and say how many
+    // are behind them.
+    seo: (() => {
+      const report = json(getSetting('seo_report'), null);
+      if (!report) return null;
+      const findings = report.findings || [];
+      return {
+        ...report,
+        findings: findings.slice(0, 40),
+        findingsTotal: findings.length,
+      };
+    })(),
     knowledge: {
       packs: packSummary(),
       total: count("SELECT COUNT(*) FROM lessons WHERE active = 1 AND source LIKE 'pack:%'"),
@@ -270,6 +297,15 @@ export function buildState() {
       postedAt: s.posted_at,
       used: s.used,
     })),
+    // What Etsy actually looks like for the phrases this shop is betting on.
+    // Read from live listings, not guessed, and shown so the research is
+    // something you can check rather than something you take on trust.
+    market: {
+      readings: recentMarket(14),
+      openings: openings(4).map((r) => r.keyword),
+      lastCheckedAt: Number(getSetting('last_market_scan', '0')),
+      everyHours: config.marketScanHours,
+    },
     sources: Prospector.sourceStatus(),
     // The Billboard shows a tagline, the channel names and the first move. The
     // whole plan is five kilobytes of prose per campaign and it was being

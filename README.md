@@ -301,6 +301,22 @@ npm run etsy:push        # upload what you have approved, and say what happened
 npm run etsy:cleanup     # find and delete duplicate drafts in your shop
 ```
 
+### Working round the clock
+
+With the loop running the fleet never idles:
+
+* the **Researcher** reads Etsy's own live listings every few hours — how
+  crowded each phrase is, what it sells for, which words the ranking titles
+  use. That needs `ETSY_KEYSTRING` and nothing else: no shop, no sign-in;
+* the **Scout** proposes from those readings as well as its own notebook, and
+  keeps the shortlist at `IDEA_BACKLOG_TARGET` by letting the weakest ideas
+  make way rather than stopping when the list is full;
+* the **Signwriter** sweeps the shop's findability, the **Curator** looks for
+  bundles and spin-offs, and both foremen chase anything that has stalled —
+  except what is waiting on an answer from you, which they leave alone.
+
+Nothing is ever published, spent or sent without you.
+
 Nothing reaches Etsy without a decision from you, and each decision is worth
 exactly one upload — approving the listing, or pressing **send to etsy**. A
 retried job finds the permission spent and asks again rather than creating a

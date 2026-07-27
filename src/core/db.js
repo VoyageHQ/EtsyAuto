@@ -77,6 +77,23 @@ CREATE TABLE IF NOT EXISTS listings (
   updated_at      INTEGER NOT NULL
 );
 
+-- What Etsy actually looks like for a phrase a buyer would type. Read from
+-- Etsy's public search, not guessed. One row per phrase, overwritten each
+-- sweep, with the previous count kept so movement is visible.
+CREATE TABLE IF NOT EXISTS market (
+  id            TEXT PRIMARY KEY,
+  keyword       TEXT NOT NULL UNIQUE,
+  listings      INTEGER NOT NULL,
+  was_listings  INTEGER,
+  competition   TEXT,          -- crowded | moderate | quiet
+  price_low     REAL,
+  price_median  REAL,
+  price_high    REAL,
+  sampled       INTEGER,
+  phrases       TEXT,          -- json [{word, inListings}]
+  checked_at    INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS jobs (
   id          TEXT PRIMARY KEY,
   agent_id    TEXT NOT NULL,

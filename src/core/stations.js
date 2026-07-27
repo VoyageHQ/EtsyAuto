@@ -80,7 +80,7 @@ export const STATIONS = [
     building: 'stalls',
     tile: { x: 26, y: 32 },
     door: { x: 30, y: 32 },
-    blurb: 'Listings that are live, or packed and ready for you to upload.',
+    blurb: 'Everything finished, on its own shelf: waiting for you, held, on its way, and up on Etsy.',
     counter: 'listingsLive',
     counterLabel: (n) => (n ? `${n} live` : 'shutters down'),
   },

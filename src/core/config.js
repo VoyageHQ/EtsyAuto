@@ -53,7 +53,11 @@ export const config = {
   root: ROOT,
   dataDir,
   outDir,
-  dbPath: join(dataDir, 'valley.db'),
+  // Overridable so the test suite never opens the shop's real database.
+  // It used to, and the two drifted into each other: a run's check count
+  // depended on how many times it had been run before, and one bad assertion
+  // away from `npm test` was somebody's actual catalogue.
+  dbPath: str('DB_PATH') ? resolve(ROOT, str('DB_PATH')) : join(dataDir, 'valley.db'),
 
   shopName: str('SHOP_NAME', 'Hartistic'),
   // Your logo, laid over every listing image so a screenshot of the preview is
@@ -111,6 +115,14 @@ export const config = {
   autoLoop: bool('AUTO_LOOP', true),
   tickSeconds: num('TICK_SECONDS', 20),
   ideaBacklogTarget: num('IDEA_BACKLOG_TARGET', 18),
+  // How often the Researcher goes and reads Etsy's live listings for the
+  // phrases this shop cares about. Short, because the Scout's next batch of
+  // ideas is built on it. It is a handful of public GETs, not a scrape.
+  marketScanHours: num('MARKET_SCAN_HOURS', 3),
+  // How often the Scout is asked for a fresh batch. It never stops now: when
+  // the shortlist is full the weakest make way, so the pile stays the same
+  // size and gets better rather than longer.
+  ideaAskMinutes: num('IDEA_ASK_MINUTES', 30),
   maxActiveProducts: num('MAX_ACTIVE_PRODUCTS', 3),
 
   discord: {
@@ -130,10 +142,15 @@ export const config = {
     accessToken: str('ETSY_ACCESS_TOKEN'),
     refreshToken: str('ETSY_REFRESH_TOKEN'),
     publishMode: str('ETSY_PUBLISH_MODE', 'draft'),
-    // The circuit breaker. Nothing about this shop should ever need to create
-    // more than a few listings an hour, so a number above this is a bug
-    // running rather than a good day.
-    maxUploadsPerHour: num('ETSY_MAX_UPLOADS_PER_HOUR', 6),
+    // The circuit breaker, not a speed limit.
+    //
+    // Every upload already needs a decision from you that is spent when it is
+    // used, so this is only here to catch a bug that finds a way to mint those
+    // decisions in a loop. Set at six it caught the owner instead: approve a
+    // dozen listings after a tidy-up and the seventh onwards silently refused.
+    // Generous enough that a real morning's work goes through, tight enough
+    // that a runaway hits a wall long before it fills a shop.
+    maxUploadsPerHour: num('ETSY_MAX_UPLOADS_PER_HOUR', 30),
     get enabled() {
       return Boolean(this.keystring && this.accessToken && this.shopId);
     },

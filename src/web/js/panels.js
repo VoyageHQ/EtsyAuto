@@ -975,39 +975,117 @@ function searchPreview(product, state) {
     </div>`;
 }
 
+/**
+ * Which shelf of the Shopfront a product belongs on.
+ *
+ * One flat list answered none of the questions anybody actually opens this
+ * panel with — what is up, what is waiting on me, what is stuck. Order
+ * matters: the first matching shelf wins, and they are arranged so the ones
+ * needing you come before the ones that do not.
+ */
+function shelfFor(product) {
+  if (product.status === 'blocked') return 'held';
+  if (product.awaitingApproval) return 'waiting';
+  // You have said yes and it has not gone up yet — a queued job, or one held
+  // back by the hourly ceiling.
+  if (product.listing?.uploadOkAt && !product.listing?.etsyListingId) return 'sending';
+  if (product.listing?.etsyListingId) {
+    return product.listing.status === 'live' ? 'live' : 'draft';
+  }
+  if (product.listing?.exportPath) return 'packed';
+  return null;
+}
+
+const SHELVES = [
+  {
+    id: 'waiting',
+    title: 'Waiting for you',
+    note: 'Finished and checked. Nothing goes to Etsy until you answer — the question is in heads up, or in the Review Hall.',
+  },
+  {
+    id: 'held',
+    title: 'Held — something went wrong',
+    note: 'Finished work earning nothing. Each one says what stopped it; "send to etsy" tries again.',
+  },
+  {
+    id: 'sending',
+    title: 'Approved, on its way',
+    titleWhenOffline: 'Approved, but nowhere to go',
+    note: 'You said yes. The Shopkeeper uploads these on the next tick, images and download files attached.',
+    // Saying "on its way" when there is nowhere for it to go is the kind of
+    // cheerful lie this shop has already been bitten by twice.
+    noteWhenOffline:
+      'You said yes, but Etsy is not connected so nothing can go anywhere. Their files are packed in ' +
+      'out/ ready to paste in. Run npm run etsy:check to have them uploaded instead.',
+  },
+  {
+    id: 'live',
+    title: 'Live on Etsy',
+    note: 'On sale. Changing a live listing resets what Etsy has learned about it, so leave a new one alone for a few weeks.',
+  },
+  {
+    id: 'draft',
+    title: 'Drafts on Etsy',
+    note: 'Uploaded and waiting for you to publish them in Etsy. Nothing here is on sale.',
+  },
+  {
+    id: 'packed',
+    title: 'Packed, not uploaded',
+    note: 'Ready to paste in by hand. Connect Etsy and these can go up on their own.',
+  },
+];
+
 function shopfrontPanel(state, ctx) {
-  // Blocked products belong here too. A listing held back because its images
-  // would not render is finished work earning nothing, and the Shopkeeper tells
-  // you to come to the Shopfront and press "send to etsy" — so it has to be
-  // here to press.
-  const products = state.products.filter(
-    (p) => p.stage === 'listed' || p.listing?.status === 'live' || (p.status === 'blocked' && p.listing)
-  );
+  const shelves = new Map(SHELVES.map((s) => [s.id, []]));
+  for (const product of state.products) {
+    const shelf = shelfFor(product);
+    if (shelf) shelves.get(shelf).push(product);
+  }
+
+  const card = (p) =>
+    productCard(p, state, {
+      extra: searchPreview(p, state),
+      actions: `
+        ${
+          p.listing?.exportPath
+            ? `<a class="tiny" style="text-decoration:none;padding:4px 7px;border:1px solid var(--line)"
+                href="/${esc(p.listing.exportPath)}/LISTING.md" target="_blank">listing.md</a>`
+            : ''
+        }
+        <button class="tiny" data-png="${esc(p.id)}">save pngs</button>
+        ${
+          p.listing?.etsyListingId
+            ? `<a class="tiny" style="text-decoration:none;padding:4px 7px;border:1px solid var(--line)"
+                href="https://www.etsy.com/listing/${esc(p.listing.etsyListingId)}" target="_blank">on etsy</a>`
+            : p.listing
+              ? `<button class="tiny" data-url="${esc(p.listing.id)}">paste etsy url</button>`
+              : ''
+        }`,
+    });
+
+  // One shelf reads differently with no Etsy connection, because "on its way"
+  // is not true when there is nowhere for it to go.
+  const offline = !state.shop.etsy.connected;
+  const titleOf = (s) => (offline && s.titleWhenOffline ? s.titleWhenOffline : s.title);
+  const noteOf = (s) => (offline && s.noteWhenOffline ? s.noteWhenOffline : s.note);
+  const filled = SHELVES.filter((s) => shelves.get(s.id).length);
+
   return {
-    html: products.length
-      ? products
-          .map((p) =>
-            productCard(p, state, {
-              extra: searchPreview(p, state),
-              actions: `
-                ${
-                  p.listing?.exportPath
-                    ? `<a class="tiny" style="text-decoration:none;padding:4px 7px;border:1px solid var(--line)"
-                        href="/${esc(p.listing.exportPath)}/LISTING.md" target="_blank">listing.md</a>`
-                    : ''
-                }
-                <button class="tiny" data-png="${esc(p.id)}">save pngs</button>
-                ${
-                  p.listing?.etsyListingId
-                    ? `<a class="tiny" style="text-decoration:none;padding:4px 7px;border:1px solid var(--line)"
-                        href="https://www.etsy.com/listing/${esc(p.listing.etsyListingId)}" target="_blank">on etsy</a>`
-                    : p.listing
-                      ? `<button class="tiny" data-url="${esc(p.listing.id)}">paste etsy url</button>`
-                      : ''
-                }`,
-            })
-          )
-          .join('')
+    html: filled.length
+      ? `<div class="tile" style="margin-bottom:14px">
+           ${filled
+             .map((s) => `<b>${shelves.get(s.id).length}</b> ${esc(titleOf(s).toLowerCase())}`)
+             .join(' &nbsp;·&nbsp; ')}
+         </div>
+         ${filled
+           .map(
+             (s) => `
+             <h4 style="margin:16px 0 4px">${esc(titleOf(s))}
+               <span class="quiet" style="font-weight:normal">${shelves.get(s.id).length}</span></h4>
+             <p class="quiet" style="margin:0 0 10px">${esc(noteOf(s))}</p>
+             ${shelves.get(s.id).map(card).join('')}`
+           )
+           .join('')}`
       : '<p class="quiet">Nothing in the shop yet. Approve a finished product in the Review Hall.</p>',
     mount(root) {
       wireProducts(root, ctx);
@@ -1271,6 +1349,12 @@ function signpostPanel(state, ctx) {
     };
   }
 
+  // The payload carries the worst findings, not all of them — the full sweep
+  // grows with the catalogue and rides on every push. Say so, rather than
+  // letting the counts here quietly disagree with the summary line above.
+  const shown = (report.findings || []).length;
+  const truncated = Number(report.findingsTotal || shown) - shown;
+
   const groups = ['bad', 'poor', 'note']
     .map((severity) => {
       const items = (report.findings || []).filter((f) => f.severity === severity);
@@ -1294,7 +1378,7 @@ function signpostPanel(state, ctx) {
       <div class="bar">
         <span class="quiet" style="flex:1">${esc(report.summary || '')}${
           report.at ? ` · last read ${esc(when(report.at))}` : ''
-        }</span>
+        }${truncated > 0 ? ` · showing the worst ${shown}, ${truncated} more` : ''}</span>
         <button class="tiny" data-act="seo">check again</button>
       </div>
       ${groups || '<p class="quiet">Nothing is hurting your search position. That is the goal, not an empty page.</p>'}
@@ -1322,12 +1406,60 @@ function wireSeo(root, ctx) {
 
 function lookoutPanel(state) {
   const withResearch = state.products.filter((p) => p.stage !== 'research');
+  const market = state.market || {};
+  const readings = market.readings || [];
+
+  // The only line on this panel that is not an opinion. Everything else here
+  // is the shop reasoning about itself; this is Etsy's own live listings.
+  const marketTile = `
+    <div class="tile" style="margin-bottom:12px">
+      <h4>What Etsy actually looks like</h4>
+      ${
+        readings.length
+          ? `<p class="quiet">Read from live listings${
+              market.lastCheckedAt ? ` ${esc(when(market.lastCheckedAt))}` : ''
+            }, and again every ${esc(market.everyHours || 3)} hours.</p>
+             <table style="width:100%;border-collapse:collapse;font-size:10px">
+               <tr style="color:var(--dimmer);text-align:left">
+                 <th>phrase</th><th>live listings</th><th>crowd</th><th>typical price</th>
+               </tr>
+               ${readings
+                 .map((r) => {
+                   const move =
+                     r.wasListings && r.wasListings !== r.listings
+                       ? `<span class="quiet"> ${r.listings > r.wasListings ? '▲' : '▼'}</span>`
+                       : '';
+                   return `<tr>
+                     <td>${esc(r.keyword)}</td>
+                     <td>${r.listings.toLocaleString()}${move}</td>
+                     <td>${esc(r.competition)}</td>
+                     <td>${money(r.priceMedian, state.shop.currency)}</td>
+                   </tr>`;
+                 })
+                 .join('')}
+             </table>
+             ${
+               (market.openings || []).length
+                 ? `<p style="margin-top:8px"><b>Where a new listing gets seen:</b>
+                    ${market.openings.map((k) => esc(k)).join(', ')}. Crowded phrases are
+                    invisible however good the product is.</p>`
+                 : ''
+             }`
+          : `<p class="quiet">${
+              state.shop.etsy.missing?.includes('ETSY_KEYSTRING')
+                ? 'Add ETSY_KEYSTRING to .env and the Researcher will read the real marketplace — it needs nothing else, not even a shop.'
+                : 'No reading yet. The Researcher goes and looks within the hour.'
+            }</p>`
+      }
+    </div>`;
+
   return {
     html: `
       <div class="tile" style="margin-bottom:12px">
         <h4>What to list right now</h4>
         <p>${esc(state.counts.lookout || 'The Researcher has not been up here yet today.')}</p>
       </div>
+      ${marketTile}
       ${
         withResearch.length
           ? withResearch
