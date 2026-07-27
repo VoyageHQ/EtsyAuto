@@ -6,6 +6,7 @@ import config from '../core/config.js';
 import { getProduct, getListing, assetsFor, setStage, blockProduct } from '../pipeline/products.js';
 import { writeListingPack } from '../etsy/export.js';
 import { createDraftListing, connectionGaps, whyNotConnected } from '../etsy/api.js';
+import { mayUpload, claimUpload, markUploaded } from '../etsy/permission.js';
 import { rasterise, findBrowser } from '../design/rasterise.js';
 import { insert, update, one } from '../core/db.js';
 import { uid, now, money } from '../core/util.js';
@@ -120,6 +121,21 @@ say so plainly.`,
     }
 
     if (!gaps.length) {
+      // The gate. One owner decision buys one upload. Asked before any work is
+      // done, and spent below just before Etsy is called — so a retried job, a
+      // second tick or a re-run script finds nothing left and stops. This is
+      // the check that was missing when this shop filled with duplicate drafts.
+      const permission = mayUpload(listing);
+      if (!permission.allowed) {
+        this.say(`${product.sku} was not sent to Etsy. ${permission.why}`, {
+          kind: 'listed',
+          level: permission.code === 'rate-limit' ? 'error' : 'warn',
+          meta: { productId: product.id, code: permission.code },
+        });
+        this.goHome();
+        return { result: { refused: permission.code, why: permission.why } };
+      }
+
       try {
         const assets = assetsFor(product.id);
         const deliverables = assets
@@ -150,7 +166,23 @@ say so plainly.`,
           return { result: { held: 'no listing images' } };
         }
 
+        // Spent now, not earlier: an image that would not render should cost
+        // you a retry, not your approval. Spent *before* the call rather than
+        // after it, because a half-finished upload must need a fresh decision
+        // — the other way round is how one approval becomes many listings.
+        const spend = claimUpload(listing);
+        if (!spend.allowed) {
+          this.say(`${product.sku} was not sent to Etsy. ${spend.why}`, {
+            kind: 'listed',
+            level: 'warn',
+            meta: { productId: product.id, code: spend.code },
+          });
+          this.goHome();
+          return { result: { refused: spend.code, why: spend.why } };
+        }
+
         const created = await createDraftListing({ listing, product, deliverables, images });
+        markUploaded(listing.id);
         update('listings', listing.id, {
           status: created.state === 'active' ? 'live' : 'draft',
           etsy_listing_id: created.listingId,

@@ -282,6 +282,17 @@ export function imageProblems(images = []) {
     if (baked.length) {
       problems.push(`Do not bake "${baked.join('", "')}" into an image — it will outlive the offer.`);
     }
+    // A currency symbol on its own is a column heading on a budget sheet. A
+    // currency symbol with a number after it is a price, and the shop reprices.
+    if (rules.neverOnImagesPattern) {
+      const priced = rendered.match(new RegExp(rules.neverOnImagesPattern, 'i'));
+      if (priced) {
+        problems.push(
+          `A price ("${priced[0].trim()}") is baked into an image. Etsy caches images and the ` +
+            'shop reprices, so the picture ends up contradicting the listing.'
+        );
+      }
+    }
   }
 
   return problems;

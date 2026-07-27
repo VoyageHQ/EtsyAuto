@@ -297,14 +297,21 @@ for you:
 ```bash
 npm run etsy:auth        # gets the access token your keystring cannot get alone
 npm run etsy:check       # proves the token works and finds your shop id
-npm run etsy:push        # upload now, in the foreground, and say what happened
+npm run etsy:push        # upload what you have approved, and say what happened
+npm run etsy:cleanup     # find and delete duplicate drafts in your shop
 ```
+
+Nothing reaches Etsy without a decision from you, and each decision is worth
+exactly one upload — approving the listing, or pressing **send to etsy**. A
+retried job finds the permission spent and asks again rather than creating a
+second listing. Behind that is a ceiling of `ETSY_MAX_UPLOADS_PER_HOUR`
+(default 6), because nothing here should ever need more than a handful an hour.
 
 `etsy:push` is the one to reach for when a listing did not appear. The dashboard
 button queues a job and reports in the activity feed; this does the same work
 with nothing hidden — Etsy's actual reply, and a count of how many images and
-download files really attached. Add `--yes` to upload, `--all` to include
-listings that are already up, or a SKU to do just one.
+download files really attached. Add `--yes` to upload, or name a SKU to send
+just that one.
 
 Three variables have to be filled in for uploads to happen: `ETSY_KEYSTRING`,
 `ETSY_ACCESS_TOKEN` and `ETSY_SHOP_ID`. With some but not all of them the

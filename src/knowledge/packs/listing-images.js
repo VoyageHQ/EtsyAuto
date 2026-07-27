@@ -38,8 +38,17 @@ export default {
       minLongEdgePx: 2000,
       // Words the first image should carry so nobody thinks a parcel is coming.
       firstImageMustSuggest: ['printable', 'instant download', 'digital', 'download', 'print at home'],
-      // Things that must never be baked into an image.
-      neverOnImages: ['£', '$', '€', 'sale ends', 'discount code', 'free shipping'],
+      // Things that must never be baked into an image. What ages badly is a
+      // *price*, not a currency symbol: a budget planner's column heading is
+      // "£" and always will be. Listing a bare "£" here rejected every
+      // bookkeeping and budget product the shop made, which is most of them.
+      neverOnImages: ['sale ends', 'discount code', 'free shipping', 'was £', 'was $', 'rrp'],
+      // A symbol with a number after it is an offer, and offers outlive the
+      // picture they are painted on.
+      // Whole amount, not just the first digit, so the Inspector can quote it
+      // back — "a price (£4) is baked in" sends somebody hunting for the wrong
+      // thing when the image says £4.99.
+      neverOnImagesPattern: '[£$€]\\s?\\d+(?:[.,]\\d{1,2})?',
     },
   },
 };

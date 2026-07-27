@@ -372,6 +372,38 @@ export async function deleteDraftListing(listingId) {
   return current;
 }
 
+/**
+ * Every listing in the shop in a given state, paged out in full.
+ *
+ * Etsy returns 100 at a time and will happily give you the first page forever
+ * if you forget the offset, which is a quiet way to under-count a mess.
+ *
+ * @param {string} state draft | active | inactive | expired | sold_out
+ * @param {number} max   stop after this many, so a runaway cannot spin
+ */
+export async function shopListings(state = 'draft', max = 2000) {
+  if (!etsyEnabled()) throw new Error('Etsy credentials are not configured.');
+  const found = [];
+  for (let offset = 0; offset < max; offset += 100) {
+    const data = await call(
+      `/application/shops/${config.etsy.shopId}/listings?state=${state}&limit=100&offset=${offset}`
+    );
+    const page = data.results || [];
+    for (const row of page) {
+      found.push({
+        id: String(row.listing_id),
+        title: row.title || '',
+        state: row.state,
+        createdAt: Number(row.original_creation_timestamp || row.creation_timestamp || 0) * 1000,
+        images: Number(row.listing_images_count ?? 0),
+        url: row.url || `https://www.etsy.com/listing/${row.listing_id}`,
+      });
+    }
+    if (page.length < 100) break;
+  }
+  return found;
+}
+
 /** Recent shop receipts, so the Ledger has something real to show. */
 export async function fetchReceipts(limit = 25) {
   if (!etsyEnabled()) return [];

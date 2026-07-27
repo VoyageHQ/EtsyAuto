@@ -21,11 +21,15 @@ import { isRunning } from '../pipeline/orchestrator.js';
 import { listProducts, getListing, assetsFor } from '../pipeline/products.js';
 import { llm } from '../core/llm.js';
 import { etsyEnabled, connectionGaps, whyNotConnected } from '../etsy/api.js';
+import { awaitingUpload, uploadsInLastHour } from '../etsy/permission.js';
 import { insightsSummary } from '../core/insights.js';
 import { todayUsage, usageByAgent } from '../core/spend.js';
 import { failureSummary } from '../core/retro.js';
 import { money } from '../core/util.js';
 import { buildDigest } from '../core/digest.js';
+
+/** How many ventures ride in the pushed state. See the note where it is used. */
+const VENTURES_IN_PAYLOAD = 16;
 
 export function clock(date = new Date()) {
   const hour = date.getHours();
@@ -62,6 +66,8 @@ function stationCounts() {
     // The harbour.
     signals: count('SELECT COUNT(*) FROM signals'),
     venturesActive: count("SELECT COUNT(*) FROM ventures WHERE status IN ('approved','building') AND stage != 'live'"),
+    // The real total, because the payload only carries the top slice of them.
+    venturesTotal: count('SELECT COUNT(*) FROM ventures'),
     venturesUnderReview: count("SELECT COUNT(*) FROM ventures WHERE stage = 'analysis' AND status IN ('proposed','approved')"),
     venturesPlanning: count("SELECT COUNT(*) FROM ventures WHERE stage = 'plan'"),
     venturesBuilding: count("SELECT COUNT(*) FROM ventures WHERE stage IN ('build','marketing') AND status != 'live'"),
@@ -119,6 +125,13 @@ export function buildState() {
         // nothing when two of the three variables are already filled in.
         missing: connectionGaps(),
         why: whyNotConnected(),
+        // Nothing reaches Etsy without one of your decisions behind it, and
+        // no more than this many an hour whatever happens. Both numbers are on
+        // screen because the alternative — trusting that the gate is there —
+        // is what put a hundred duplicate drafts in a real shop.
+        approvedWaiting: awaitingUpload().length,
+        uploadedLastHour: uploadsInLastHour(),
+        maxPerHour: config.etsy.maxUploadsPerHour,
       },
       discord: { connected: Boolean(getSetting('discord_ready')) },
       autoLoop: config.autoLoop,
@@ -210,7 +223,13 @@ export function buildState() {
       total: Number(one('SELECT IFNULL(SUM(amount),0) AS t FROM sales')?.t || 0),
       sales: all('SELECT * FROM sales ORDER BY occurred_at DESC LIMIT 20'),
     },
-    ventures: listVentures().map((v) => ({
+    // Every venture carries its full analysis, plan and evidence — several
+    // kilobytes of prose each — and this whole payload is pushed down the SSE
+    // stream on every change. Thirty ventures took it past 500KB, at which
+    // point the dashboard is spending its time parsing rather than drawing.
+    // The panels are ranked lists; nobody scrolls two hundred. Newest and
+    // best-scoring first, and a count of the rest so nothing is hidden.
+    ventures: listVentures().slice(0, VENTURES_IN_PAYLOAD).map((v) => ({
       id: v.id,
       slug: v.slug,
       name: v.name,
@@ -221,7 +240,9 @@ export function buildState() {
       monetisation: v.monetisation,
       analysis: v.analysis,
       plan: v.plan,
-      evidence: v.evidence,
+      // Six quotes is already more than anyone reads on a card, and the full
+      // set is in the venture's own folder.
+      evidence: (v.evidence || []).slice(0, 6),
       effort: v.effort,
       confidence: v.confidence,
       score: v.score,
@@ -250,7 +271,19 @@ export function buildState() {
       used: s.used,
     })),
     sources: Prospector.sourceStatus(),
-    campaigns: allCampaigns(),
+    // The Billboard shows a tagline, the channel names and the first move. The
+    // whole plan is five kilobytes of prose per campaign and it was being
+    // pushed down the wire on every tick to render three lines — and the full
+    // thing is already on disk at marketing/LAUNCH-PLAN.md, which the panel
+    // links to. Send what is drawn.
+    campaigns: allCampaigns().map((c) => ({
+      ...c,
+      plan: {
+        tagline: c.plan?.tagline ?? '',
+        channels: (c.plan?.channels || []).map((ch) => ({ name: ch.name })),
+        sequence: (c.plan?.sequence || []).slice(0, 1),
+      },
+    })),
     insights: insightsSummary(),
     budget: { ...todayUsage(), byAgent: usageByAgent() },
     failures: failureSummary(6),

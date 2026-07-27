@@ -20,6 +20,7 @@ import config from '../src/core/config.js';
 import { all, one, update } from '../src/core/db.js';
 import { listProducts, getListing, assetsFor } from '../src/pipeline/products.js';
 import { deleteDraftListing, listingState, createDraftListing, etsyEnabled } from '../src/etsy/api.js';
+import { markUploaded, uploadsInLastHour } from '../src/etsy/permission.js';
 import { getAgent } from '../src/agents/registry.js';
 import { buildProduct } from '../src/design/build.js';
 import { writeListingPack } from '../src/etsy/export.js';
@@ -113,6 +114,16 @@ let failed = 0;
 
 for (const { product, listing } of redraft) {
   try {
+    // A replacement is one out, one in, so it cannot multiply — but it still
+    // counts against the hourly limit. Anything that creates listings has to
+    // be behind the same wall, or the wall has a gap in it.
+    const recent = uploadsInLastHour();
+    if (recent >= config.etsy.maxUploadsPerHour) {
+      console.log(`  ${amber('stopped')} — ${recent} listings have gone up in the last hour, which is the limit.`);
+      console.log(`      ${dim('Run this again later, or raise ETSY_MAX_UPLOADS_PER_HOUR in .env.')}`);
+      break;
+    }
+
     // Rebuild first. If this fails, the old draft is still there — better a
     // stale draft than none at all.
     console.log(`  ${product.sku} rebuilding files…`);
@@ -136,6 +147,7 @@ for (const { product, listing } of redraft) {
     console.log(`  ${product.sku} creating the new draft…`);
     const created = await createDraftListing({ listing: fresh, product, deliverables, images });
 
+    markUploaded(listing.id);
     writeListingPack(product, fresh);
     update('listings', listing.id, {
       etsy_listing_id: created.listingId,

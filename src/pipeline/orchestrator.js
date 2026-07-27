@@ -20,6 +20,7 @@ import {
   connectionGaps,
   whyNotConnected,
 } from '../etsy/api.js';
+import { grantUpload } from '../etsy/permission.js';
 import { now, BadInput } from '../core/util.js';
 import { teach } from '../core/memory.js';
 
@@ -117,6 +118,10 @@ function route(approval) {
     const product = getProduct(approval.ref_id);
     if (!product) return;
     if (approval.answer === 'publish') {
+      // This click is the permission, and it is worth exactly one upload. The
+      // Shopkeeper spends it; nothing can mint another without you.
+      const listing = one('SELECT id FROM listings WHERE product_id = ?', product.id);
+      if (listing) grantUpload(listing.id, 'approval');
       enqueue({
         agent: 'lister',
         kind: 'lister.publish',
@@ -335,6 +340,11 @@ export async function relist(productId) {
     updated_at: now(),
   });
   update('products', productId, { status: 'active', updated_at: now() });
+
+  // Pressing the button is the owner saying yes, and it buys one upload —
+  // the same currency the approval gate spends, so pressing it twice while a
+  // job is still queued cannot produce two listings.
+  grantUpload(listing.id, 'send-to-etsy');
 
   enqueue({
     agent: 'lister',

@@ -66,6 +66,41 @@ ETSY_PUBLISH_MODE=active    # listings go live the moment you approve them
 
 Leave it on `draft` until you have seen a few come through and you trust it.
 
+### Nothing goes up without you
+
+One decision buys **one** upload, and it is spent the moment the Shopkeeper
+acts on it.
+
+You grant it by approving the listing in the Review Hall, or by pressing
+**send to etsy** in the Shopfront. Nothing else can grant it — not a retried
+job, not a second tick of the loop, not re-running a script. If a job runs
+again it finds the permission already spent and asks you instead.
+
+Behind that sits a ceiling:
+
+```
+ETSY_MAX_UPLOADS_PER_HOUR=6   # default
+```
+
+Nothing about a shop like this needs to create more than a handful of listings
+an hour, so a number above the ceiling is a bug running rather than a good day.
+The Office tile shows how many you have approved and how many of the hour's
+allowance is used.
+
+This is not theoretical caution. An earlier upload path checked only whether
+the credentials were set, which meant every retry was free to create another
+listing — 130-odd duplicate drafts in a real shop in one evening. If it happens
+again, on any path:
+
+```bash
+npm run etsy:cleanup           # find them, group them, count them
+npm run etsy:cleanup -- --yes  # delete the duplicates, keep one of each
+```
+
+It only ever deletes **drafts**, only ones whose title it can see more than
+once, and it re-confirms each listing's state with Etsy at the moment of
+deletion. A draft you made by hand has a unique title, so it stays.
+
 ### What actually goes up
 
 A draft created this way arrives complete:

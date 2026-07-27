@@ -70,6 +70,9 @@ CREATE TABLE IF NOT EXISTS listings (
   status          TEXT NOT NULL, -- draft | exported | live | error
   etsy_listing_id TEXT,
   export_path     TEXT,
+  upload_ok_at    INTEGER,       -- the owner said yes; spent on the next upload
+  upload_ok_by    TEXT,          -- what that yes was: approval | send-to-etsy | cli
+  uploaded_at     INTEGER,
   created_at      INTEGER NOT NULL,
   updated_at      INTEGER NOT NULL
 );
@@ -291,6 +294,13 @@ for (const [table, column, type] of [
   ['ideas', 'similar_to', 'TEXT'],
   ['ideas', 'similarity', 'REAL'],
   ['products', 'variant_of', 'TEXT'],
+  // One owner decision buys exactly one upload. Set when you approve a listing
+  // or press "send to etsy", cleared the instant the Shopkeeper acts on it. A
+  // retry, a second tick, a re-run of a script — none of them can put a second
+  // draft in the shop, because the permission is already spent.
+  ['listings', 'upload_ok_at', 'INTEGER'],
+  ['listings', 'upload_ok_by', 'TEXT'],
+  ['listings', 'uploaded_at', 'INTEGER'],
 ]) {
   try {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);

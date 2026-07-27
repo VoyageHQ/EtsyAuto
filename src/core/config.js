@@ -130,6 +130,10 @@ export const config = {
     accessToken: str('ETSY_ACCESS_TOKEN'),
     refreshToken: str('ETSY_REFRESH_TOKEN'),
     publishMode: str('ETSY_PUBLISH_MODE', 'draft'),
+    // The circuit breaker. Nothing about this shop should ever need to create
+    // more than a few listings an hour, so a number above this is a bug
+    // running rather than a good day.
+    maxUploadsPerHour: num('ETSY_MAX_UPLOADS_PER_HOUR', 6),
     get enabled() {
       return Boolean(this.keystring && this.accessToken && this.shopId);
     },

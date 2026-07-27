@@ -1,10 +1,9 @@
-// Put products on Etsy right now, in the foreground, and say exactly what
-// happened.
+// Put approved products on Etsy right now, in the foreground, and say exactly
+// what happened.
 //
 //   npm run etsy:push                 # show what would go up, change nothing
-//   npm run etsy:push -- --yes        # actually upload
+//   npm run etsy:push -- --yes        # upload everything you have approved
 //   npm run etsy:push -- HV-0004 --yes
-//   npm run etsy:push -- --all --yes  # include ones already on Etsy (re-drafts them)
 //
 // "Send to etsy" on the dashboard queues a job. When that job fails, the reason
 // lands in the activity feed among a hundred other lines, and the pack it
@@ -12,19 +11,21 @@
 // nothing hidden: the real Etsy reply, the file list, the image list, and a
 // count of what actually attached.
 //
-// The rails are the same as everywhere else. Nothing is deleted without --yes,
-// only DRAFTS are ever deleted, and the state is confirmed with Etsy at the
-// moment of deletion rather than trusted from the local database.
+// It obeys the same gate as everything else, and it did not always: the first
+// version pushed every product that had copy written, approved or not, which
+// is how 130-odd drafts landed in a live shop in one go. A listing goes up
+// here only if the owner approved it in the Review Hall or pressed "send to
+// etsy" — one decision, one upload — or if you name its SKU on the command
+// line, which is that decision made here instead.
+//
+// The other rails are unchanged: nothing is deleted without --yes, only DRAFTS
+// are ever deleted, and the state is confirmed with Etsy at the moment of
+// deletion rather than trusted from the local database.
 import { join } from 'node:path';
 import config from '../src/core/config.js';
 import { listProducts, getListing, assetsFor } from '../src/pipeline/products.js';
-import {
-  createDraftListing,
-  deleteDraftListing,
-  listingState,
-  connectionGaps,
-  whyNotConnected,
-} from '../src/etsy/api.js';
+import { createDraftListing, connectionGaps, whyNotConnected } from '../src/etsy/api.js';
+import { grantUpload, mayUpload, claimUpload, markUploaded } from '../src/etsy/permission.js';
 import { getAgent } from '../src/agents/registry.js';
 import { update } from '../src/core/db.js';
 import { now, money } from '../src/core/util.js';
@@ -37,7 +38,6 @@ const amber = (s) => `\x1b[33m${s}\x1b[0m`;
 
 const args = process.argv.slice(2);
 const go = args.includes('--yes');
-const includeListed = args.includes('--all');
 const only = args.filter((a) => !a.startsWith('--')).map((a) => a.toUpperCase());
 
 console.log(`\n${bold('Sending products to Etsy')}\n`);
@@ -56,22 +56,40 @@ console.log(`  ${green('✓')} Connected to shop ${config.etsy.shopId}. ` +
 // --- what is there to send? -------------------------------------------------
 
 const queue = [];
+let waiting = 0;
 for (const product of listProducts()) {
   const listing = getListing(product.id);
   if (!listing) continue;
-  if (only.length && !only.includes(product.sku.toUpperCase())) continue;
-  if (listing.etsy_listing_id && !includeListed && !only.length) continue;
+  const named = only.includes(product.sku.toUpperCase());
+  if (only.length && !named) continue;
+
+  // Naming a SKU here is the owner deciding, out loud, about that one product.
+  // Everything else has to have been decided already.
+  if (named && !listing.upload_ok_at && !listing.etsy_listing_id) {
+    grantUpload(listing.id, 'cli');
+  }
+
+  const verdict = mayUpload(listing);
+  if (!verdict.allowed) {
+    if (verdict.code === 'not-approved') waiting += 1;
+    if (named) console.log(`${bold(product.sku)} ${amber('skipped')} — ${verdict.why}\n`);
+    continue;
+  }
   queue.push({ product, listing });
 }
 
 if (!queue.length) {
-  console.log(
-    only.length
-      ? `  Nothing matched ${only.join(', ')}.\n`
-      : `  Everything with copy written is already on Etsy. ${dim('Use --all to re-draft them.')}\n`
-  );
+  if (only.length) console.log(`  Nothing to send for ${only.join(', ')}.\n`);
+  else if (waiting) {
+    console.log(`  ${amber(`${waiting} listing(s) are written but not approved.`)}`);
+    console.log(`  ${dim('Approve them in the Review Hall, or press "send to etsy" in the Shopfront.')}\n`);
+  } else {
+    console.log('  Nothing is waiting to go up.\n');
+  }
   process.exit(0);
 }
+
+console.log(`  ${queue.length} approved and waiting.` + (waiting ? dim(`  (${waiting} more not approved)`) : '') + '\n');
 
 const shopkeeper = getAgent('lister');
 
@@ -111,25 +129,18 @@ for (const { product, listing } of queue) {
   }
   console.log(`  ${dim(`${images.length} image(s) ready`)}`);
 
-  // Replace rather than duplicate.
-  if (listing.etsy_listing_id) {
-    try {
-      const live = await listingState(listing.etsy_listing_id);
-      if (live.state !== 'draft') {
-        console.log(`  ${amber('skipped')} — listing ${listing.etsy_listing_id} is ${bold(live.state)} on Etsy.`);
-        console.log(`      ${dim('Only drafts are ever replaced. Take it down on Etsy first.')}\n`);
-        continue;
-      }
-      await deleteDraftListing(listing.etsy_listing_id);
-      console.log(`  ${dim(`deleted the old draft ${listing.etsy_listing_id}`)}`);
-    } catch (err) {
-      console.log(`  ${dim(`old draft ${listing.etsy_listing_id} is already gone (${err.message})`)}`);
-    }
-    update('listings', listing.id, { etsy_listing_id: null, updated_at: now() });
+  // Spend the permission before the call, so a failure needs a fresh decision
+  // rather than leaving a licence lying around for a retry to pick up. Re-read
+  // the row first: the rate limit counts uploads this loop has already done.
+  const spend = claimUpload(getListing(product.id));
+  if (!spend.allowed) {
+    console.log(`  ${amber('stopped')} — ${spend.why}\n`);
+    continue;
   }
 
   try {
     const created = await createDraftListing({ listing, product, deliverables, images });
+    markUploaded(listing.id);
     update('listings', listing.id, {
       status: created.state === 'active' ? 'live' : 'draft',
       etsy_listing_id: created.listingId,

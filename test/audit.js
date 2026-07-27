@@ -104,6 +104,33 @@ check(
   JSON.stringify(state.body).length < 400_000,
   `${Math.round(JSON.stringify(state.body).length / 1024)}KB`
 );
+// It went over once, by shipping every word of every venture analysis and
+// campaign plan to render three lines a card. These two are the trims that
+// brought it back, so they are worth holding.
+check(
+  'campaign plans are trimmed to what the Billboard draws',
+  (state.body?.campaigns || []).every((c) => !c.plan || Object.keys(c.plan).length <= 3),
+  Object.keys((state.body?.campaigns || [])[0]?.plan || {}).join(',')
+);
+check(
+  'the venture list is capped rather than unbounded',
+  (state.body?.ventures || []).length <= 16 &&
+    typeof state.body?.counts?.venturesTotal === 'number',
+  `${(state.body?.ventures || []).length} shipped of ${state.body?.counts?.venturesTotal}`
+);
+
+// The gate that stops a hundred duplicate drafts has to be visible, or the
+// only way to know it is there is to trust that it is.
+check(
+  'the Office can see how many uploads you have approved',
+  typeof state.body?.shop?.etsy?.approvedWaiting === 'number',
+  JSON.stringify(state.body?.shop?.etsy)
+);
+check(
+  'and the hourly upload ceiling',
+  Number(state.body?.shop?.etsy?.maxPerHour) > 0 &&
+    typeof state.body?.shop?.etsy?.uploadedLastHour === 'number'
+);
 
 // Every counter a station advertises has to exist on the payload, or the
 // building renders with a blank label and nobody notices for a month.

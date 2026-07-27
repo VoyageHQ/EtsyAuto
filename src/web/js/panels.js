@@ -194,8 +194,8 @@ function harbourOfficePanel(state, ctx) {
       <div class="grid2" style="margin-bottom:14px">
         <div class="tile">
           <h4>Ventures</h4>
-          <p>${ventures.length} on the books · ${state.counts.venturesActive || 0} in hand ·
-            ${live.length} live</p>
+          <p>${state.counts.venturesTotal ?? ventures.length} on the books ·
+            ${state.counts.venturesActive || 0} in hand · ${live.length} live</p>
           <p>One venture is built at a time. Two half-built products are worth
           less than one finished one.</p>
         </div>
@@ -211,7 +211,13 @@ function harbourOfficePanel(state, ctx) {
             .join('')}
         </div>
       </div>
-      ${ventures.length ? ventures.map((v) => ventureCard(v, state)).join('') : '<p class="quiet">Nothing yet.</p>'}`,
+      ${ventures.length ? ventures.map((v) => ventureCard(v, state)).join('') : '<p class="quiet">Nothing yet.</p>'}
+      ${
+        (state.counts.venturesTotal || 0) > ventures.length
+          ? `<p class="quiet">Showing the ${ventures.length} best-scoring of
+             ${state.counts.venturesTotal}. The rest are in <code>ventures/</code>.</p>`
+          : ''
+      }`,
   };
 }
 
@@ -536,6 +542,18 @@ function officePanel(state, ctx) {
           }${
             (state.shop.etsy.missing || []).length && (state.shop.etsy.missing || []).length < 3
               ? `<br /><b>Missing in .env:</b> ${state.shop.etsy.missing.map((m) => `<code>${esc(m)}</code>`).join(', ')}`
+              : ''
+          }</p>
+          <p>Nothing goes to Etsy until you approve it. Each yes is worth exactly one
+          upload.${
+            state.shop.etsy.approvedWaiting
+              ? ` <b>${state.shop.etsy.approvedWaiting}</b> approved and waiting.`
+              : ''
+          }</p>
+          <p class="muted">${state.shop.etsy.uploadedLastHour} of ${state.shop.etsy.maxPerHour} uploads
+          used this hour.${
+            state.shop.etsy.uploadedLastHour >= state.shop.etsy.maxPerHour
+              ? ' <b>At the limit — nothing more will go up until it clears.</b>'
               : ''
           }</p>
         </div>

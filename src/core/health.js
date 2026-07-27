@@ -15,6 +15,7 @@ import config from './config.js';
 import { openApprovals } from './approvals.js';
 import { auditListing } from '../etsy/seo.js';
 import { connectionGaps } from '../etsy/api.js';
+import { uploadsInLastHour } from '../etsy/permission.js';
 import { rulesFor } from '../knowledge/index.js';
 import { imageProblems, findTrademarks } from '../knowledge/apply.js';
 import { money } from './util.js';
@@ -89,6 +90,20 @@ export function checkShop({ staleDays = 45 } = {}) {
       'etsy',
       `Etsy is half connected — ${gaps.join(' and ')} ${gaps.length > 1 ? 'are' : 'is'} empty in .env.`,
       'Run npm run etsy:check. Until then every approved listing is packed into out/ instead of uploaded.'
+    );
+  }
+
+  // --- something creating listings in bulk ------------------------------
+  // The failure this exists for: an upload path with no approval gate put
+  // 130-odd duplicate drafts in a live shop overnight. The gate is in place
+  // now, but a shop that hits the ceiling is worth saying out loud.
+  const recentUploads = uploadsInLastHour();
+  if (recentUploads >= config.etsy.maxUploadsPerHour) {
+    add(
+      'bad',
+      'etsy',
+      `${recentUploads} listings have gone up in the last hour — the ceiling.`,
+      'Nothing more will upload until it clears. Check your Etsy drafts, and npm run etsy:cleanup if there are duplicates.'
     );
   }
 

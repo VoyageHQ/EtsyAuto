@@ -209,9 +209,17 @@ if (listingApproval) {
 
 console.log('\nLearning from its own results');
 {
+  // The Scout is told about the shop's *best* sellers, not every sale, so a
+  // £5.99 one has to beat everything the database has accumulated over
+  // previous runs to appear at all. That made this check pass or fail
+  // depending on how many times npm test had been run. Clear the slate, prove
+  // the wiring, put it back.
+  const soldId = uid('sale');
+  const priorSales = all('SELECT * FROM sales');
+  run('DELETE FROM sales');
   const sold = listProducts()[0];
   insert('sales', {
-    id: uid('sale'),
+    id: soldId,
     listing_id: null,
     sku: sold.sku,
     amount: 5.99,
@@ -239,6 +247,9 @@ console.log('\nLearning from its own results');
     );
   }
   check('the Scribe is not shown the owner-taste data it cannot use', !insightBlock('copywriter').includes('yes and no to'));
+
+  run('DELETE FROM sales WHERE id = ?', soldId);
+  for (const sale of priorSales) insert('sales', sale);
 }
 
 console.log('\nNot competing with itself');
@@ -652,6 +663,7 @@ console.log('\nWhen the upload does not happen');
   // with the same green "packed and ready", so a broken connection and a
   // finished job read identically. Each one now has to be distinguishable.
   const { connectionGaps, whyNotConnected } = await import('../src/etsy/api.js');
+  const { grantUpload, revokeUpload, mayUpload } = await import('../src/etsy/permission.js');
   const BORROWED = ['keystring', 'accessToken', 'shopId', 'sharedSecret'];
   const savedEtsy = Object.fromEntries(BORROWED.map((k) => [k, config.etsy[k]]));
 
@@ -689,12 +701,47 @@ console.log('\nWhen the upload does not happen');
 
   if (victim) {
     const shopkeeper = getAgent('lister');
+    const theListing = getListing(victim.id);
+
+    // Unapproved first. This is the gate that was missing when an upload path
+    // with no gate on it put 130-odd duplicate drafts in a real shop. The
+    // publishing section above answered an approval, and the half-connected
+    // attempt returned before spending it, so take it back explicitly.
+    revokeUpload(theListing.id);
+    const unapproved = await shopkeeper.handle({ payload: { productId: victim.id } });
+    check('an unapproved listing is refused before Etsy is called', unapproved.result?.refused === 'not-approved', JSON.stringify(unapproved.result));
+
+    grantUpload(theListing.id, 'approval');
     const out = await shopkeeper.handle({ payload: { productId: victim.id } });
     const after = listProducts(`WHERE id = '${victim.id}'`)[0];
     check('a refusal from Etsy is reported as a failure, not a pack', Boolean(out.result?.failed), JSON.stringify(out.result));
     check('   with the sign-in hint attached to the 401', /etsy:auth/.test(String(out.result?.failed)), String(out.result?.failed).slice(0, 120));
     check('   and the product held rather than marked finished', after.status === 'blocked', after.status);
+
+    // The permission was spent on the attempt. That is deliberate: a failed
+    // upload needs a fresh decision, because the other way round is how one
+    // yes turns into a shopful of drafts when something retries in a loop.
+    check('   and the approval was spent, so a retry cannot try again', !getListing(victim.id).upload_ok_at);
+    const retry = await shopkeeper.handle({ payload: { productId: victim.id } });
+    check('   a retried job asks you again instead of uploading', retry.result?.refused === 'not-approved', JSON.stringify(retry.result));
     update('products', victim.id, { status: 'active' });
+  }
+
+  // The wall behind the gate: even with permission granted every time, a
+  // runaway stops after a handful rather than filling the shop.
+  {
+    const saved = config.etsy.maxUploadsPerHour;
+    config.etsy.maxUploadsPerHour = 2;
+    const rows = all("SELECT id FROM listings LIMIT 3");
+    for (const row of rows) update('listings', row.id, { uploaded_at: Date.now(), etsy_listing_id: null });
+    const some = getListing(victim?.id) || null;
+    if (some) {
+      grantUpload(some.id, 'approval');
+      const verdict = mayUpload({ ...getListing(victim.id), etsy_listing_id: null });
+      check('the hourly cap stops a runaway even with permission', verdict.code === 'rate-limit', verdict.code);
+    }
+    for (const row of rows) update('listings', row.id, { uploaded_at: null });
+    config.etsy.maxUploadsPerHour = saved;
   }
 
   globalThis.fetch = realFetch;
@@ -958,12 +1005,20 @@ console.log('\nKnowledge that works without a model');
     imageProblems([
       { label: '1', svg: '<text>INSTANT DOWNLOAD</text>' }, { label: '2', svg: '<text>only \u00a34.99</text>' },
       { label: '3', svg: '<text>x</text>' }, { label: '4', svg: '<text>y</text>' },
-    ]).some((p) => p.includes('outlive'))
+    ]).some((p) => p.includes('price ("£4.99") is baked'))
   );
   check(
     '   while a clean set passes',
     imageProblems([
       { label: '1', svg: '<text>INSTANT DOWNLOAD</text>' }, { label: '2', svg: '<text>a</text>' },
+      { label: '3', svg: '<text>b</text>' }, { label: '4', svg: '<text>c</text>' },
+    ]).length === 0
+  );
+  check(
+    '   and a bare currency symbol is a column heading, not a price',
+    imageProblems([
+      { label: '1', svg: '<text>INSTANT DOWNLOAD</text>' },
+      { label: '2', svg: '<text>Amount £</text><text>Paid £</text>' },
       { label: '3', svg: '<text>b</text>' }, { label: '4', svg: '<text>c</text>' },
     ]).length === 0
   );
