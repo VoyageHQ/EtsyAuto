@@ -13,6 +13,48 @@ signals ──▶ shortlist ──you pick one──▶ analysis ──▶ plan 
 
 ---
 
+
+## What is actually automated, and what is not
+
+This matters more than any feature list, because the gap between them is where
+people lose weeks.
+
+**The agents do, on their own:**
+
+- find the evidence — real questions and complaints, with view counts, from
+  Hacker News and Stack Exchange;
+- decide whether it can make money, and kill it if it cannot;
+- cut it to a fortnight of evenings and write down what is *not* being built;
+- write every file: landing page, pricing page, the API, the deploy config, a
+  GitHub Actions workflow, and the launch plan;
+- check every plan against what is genuinely free to run;
+- watch what is live: is it reachable, has anybody signed up, has anybody paid,
+  what is the one thing to do today.
+
+**You do, and no agent will do for you:**
+
+1. **Run four commands to put it online.** `DEPLOY.md` in each venture folder.
+   It is about ten minutes, once, and costs nothing.
+2. **Open a Stripe account and paste a Payment Link.** No agent can open a
+   financial account in your name, and none should be able to.
+3. **Reply to the people in `SELL.md`.** This is the one that decides whether
+   anything happens. Posting as you, to communities, from an unattended loop,
+   is how a domain gets banned and how somebody gets a reply from "you" that
+   you never wrote. The Operator drafts; you send.
+
+Anyone promising you the third one is automated is selling you a ban.
+
+## What it costs
+
+Nothing, until somebody pays you. Every service in the stack has a free tier
+with no card at signup — the exact limits are in `src/ventures/freetier.js`
+with the date they were checked, and the Architect rewrites any plan that would
+need AWS, a per-token API, an app store account or a company registration
+before the first customer.
+
+The only thing worth paying for early is a domain, about £10 a year, and only
+once somebody has actually paid you.
+
 ## The fleet
 
 | Agent | Building | What it does |

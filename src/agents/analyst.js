@@ -5,7 +5,7 @@ import config from '../core/config.js';
 import { getVenture, advanceVenture, setVentureStage } from '../ventures/pipeline.js';
 import { ask } from '../core/approvals.js';
 import { money, truncate } from '../core/util.js';
-import { ventureKillReasons } from '../knowledge/apply.js';
+import { ventureKillReasons, evidenceStrength } from '../knowledge/apply.js';
 
 export class Analyst extends Agent {
   constructor() {
@@ -142,7 +142,20 @@ Return JSON:
     const days = Number(m.daysToRevenue) || 90;
     const evidence = (venture.evidence || []).length;
     const tooSlow = days > config.ventures.maxDaysToRevenue;
-    const thin = evidence < 2;
+
+    // How many people arrived at this problem, not just how many wrote about
+    // it. A Stack Exchange question with tens of thousands of views and no
+    // answer is a search with nothing at the end of it, which is the clearest
+    // gap this whole arm can find — and counting it as one post threw it away.
+    const reach = (venture.evidence || []).reduce(
+      (acc, e) => ({
+        views: Math.max(acc.views, Number(e.views) || 0),
+        unanswered: acc.unanswered || Boolean(e.unanswered),
+      }),
+      { views: 0, unanswered: false }
+    );
+    const strength = evidenceStrength(evidence, reach);
+    const thin = strength.level === 'anecdote';
 
     return {
       wouldPay: `${venture.audience} — the ones already spending time on this weekly.`,
@@ -154,6 +167,7 @@ Return JSON:
       monetisation: m,
       risks: [
         thin ? 'Only one person has actually described this problem. That is not a market yet.' : null,
+        strength.level === 'thin' ? strength.note : null,
         'Nobody has been asked to pay yet, which is the only test that counts.',
       ].filter(Boolean),
       legal: [],

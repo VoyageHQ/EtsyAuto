@@ -318,6 +318,8 @@ for (const [table, column, type] of [
   // Where a live venture can be reached. Without it the Operator cannot tell
   // a business that is running from a folder that was never deployed.
   ['ventures', 'url', 'TEXT'],
+  // Sources that say whether a question was ever answered.
+  ['signals', 'unanswered', 'INTEGER'],
   ['listings', 'upload_ok_at', 'INTEGER'],
   ['listings', 'upload_ok_by', 'TEXT'],
   ['listings', 'uploaded_at', 'INTEGER'],

@@ -365,10 +365,26 @@ function warehousePanel(state, ctx) {
                 ventureCard(
                   v,
                   state,
-                  `<p><b>Earned</b> ${money(v.revenue, state.shop.currency)}</p>
+                  `<p><b>Earned</b> ${money(v.revenue, state.shop.currency)}
+                     ${
+                       v.url
+                         ? `· <a href="${esc(v.url)}" target="_blank" rel="noopener">${esc(v.url)}</a>`
+                         : '· <b style="color:var(--amber)">never deployed</b>'
+                     }</p>
+                   ${
+                     v.url
+                       ? ''
+                       : `<p class="quiet">Built but not online, so nobody can reach it and it cannot
+                          earn. <code>${esc(v.dir || 'the venture folder')}/DEPLOY.md</code> is four
+                          steps and costs nothing. Paste the URL here when it is up.</p>`
+                   }
+                   <div class="bar" style="border:0;padding:6px 0">
+                     <input placeholder="https://…" data-url-for="${esc(v.id)}" style="flex:1;min-width:160px" />
+                     <button class="tiny" data-seturl="${esc(v.id)}">${v.url ? 'update url' : 'it is live here'}</button>
+                   </div>
                    <div class="bar" style="border:0;padding:6px 0">
                      <input type="number" step="0.01" placeholder="amount" data-amount="${esc(v.id)}" style="width:100px" />
-                     <button class="tiny" data-revenue="${esc(v.id)}">record</button>
+                     <button class="tiny" data-revenue="${esc(v.id)}">record a payment</button>
                    </div>`
                 )
               )
@@ -377,13 +393,30 @@ function warehousePanel(state, ctx) {
       }`,
     mount(root) {
       root.addEventListener('click', async (e) => {
+        const urlFor = e.target.dataset?.seturl;
+        if (urlFor) {
+          const url = root.querySelector(`[data-url-for="${urlFor}"]`)?.value?.trim();
+          if (!url) return ctx.toast('paste the address it is live at');
+          try {
+            await api.setVentureUrl(urlFor, url);
+            ctx.toast('noted — the Operator will check it is actually up');
+          } catch (err) {
+            ctx.toast(err.message);
+          }
+          return ctx.refresh(true);
+        }
+
         const id = e.target.dataset?.revenue;
         if (!id) return;
         const input = root.querySelector(`[data-amount="${id}"]`);
         const amount = Number(input?.value);
         if (!(amount > 0)) return ctx.toast('what amount?');
-        await api.recordVentureRevenue(id, amount);
-        ctx.toast('recorded');
+        try {
+          await api.recordVentureRevenue(id, amount);
+          ctx.toast('recorded — that is the number that matters');
+        } catch (err) {
+          ctx.toast(err.message);
+        }
         ctx.refresh(true);
       });
     },

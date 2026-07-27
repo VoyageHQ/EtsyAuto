@@ -61,6 +61,9 @@ export function saveSignals(signals) {
       phrase: text(raw.phrase),
       channel: text(raw.channel),
       posted_at: number(raw.postedAt) || now(),
+      // Some sources say whether anybody ever answered. An unanswered question
+      // with real traffic is the clearest gap the harvester can find.
+      unanswered: raw.unanswered ? 1 : 0,
       harvested_at: now(),
       used: 0,
     });

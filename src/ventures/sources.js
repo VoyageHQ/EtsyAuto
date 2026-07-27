@@ -71,8 +71,16 @@ async function throttled(url, options = {}) {
       headers: { 'user-agent': UA, accept: 'application/json, text/xml;q=0.9', ...options.headers },
     });
     if (!res.ok) {
+      // Carry a little of the body. A 403 from the source and a 403 from the
+      // network between you and it are the same status and completely
+      // different problems — one is "back off", the other is "your firewall
+      // or proxy is in the way", and reporting the first when it is the
+      // second sends somebody looking in entirely the wrong place.
+      const hint = await res.text().catch(() => '');
       const err = new Error(`${res.status} ${res.statusText}`);
       err.status = res.status;
+      err.body = hint.slice(0, 160);
+      err.blockedLocally = /egress|proxy|firewall|policy|blocked by/i.test(hint);
       throw err;
     }
     return res;
@@ -84,7 +92,9 @@ async function throttled(url, options = {}) {
 const stripHtml = (text) =>
   String(text || '')
     .replace(/<[^>]+>/g, ' ')
-    .replace(/&#x27;/g, "'")
+    .replace(/&#x27;|&#39;|&apos;/g, "'")
+    .replace(/&#x2019;|&rsquo;/g, "\u2019")
+    .replace(/&nbsp;/g, ' ')
     .replace(/&quot;/g, '"')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
@@ -209,6 +219,68 @@ const pick = (xml, tag) => {
   return match ? match[1] : '';
 };
 
+// --- Stack Exchange ---------------------------------------------------------
+// The best source here, and it was missing.
+//
+// softwarerecs.stackexchange.com exists for exactly one purpose: people asking
+// "is there a tool that does X". Every question is a stated unmet need, from
+// somebody who cared enough to write it up — and unlike a forum post it comes
+// with numbers. A question with 170,000 views and no accepted answer is not one
+// person's opinion; it is a market with nobody serving it.
+//
+// The API is free, documented and needs no key at this volume. Nothing here is
+// scraped.
+
+const SE_SITES = ['softwarerecs', 'webapps', 'superuser', 'serverfault'];
+
+async function fetchStackExchange({ phrases, perPhrase = 6 }) {
+  const out = [];
+  for (const site of SE_SITES) {
+    for (const phrase of phrases.slice(0, 8)) {
+      const url =
+        'https://api.stackexchange.com/2.3/search/advanced?' +
+        new URLSearchParams({
+          order: 'desc',
+          sort: 'votes',
+          q: phrase,
+          site,
+          filter: 'withbody',
+          pagesize: String(Math.min(20, perPhrase)),
+        });
+      const res = await throttled(url);
+      const data = await res.json();
+      for (const item of data.items || []) {
+        const body = stripHtml(item.body).slice(0, 1200);
+        if (body.length < 60) continue;
+        out.push({
+          source: 'stackexchange',
+          externalId: `${site}:${item.question_id}`,
+          title: stripHtml(item.title),
+          text: body,
+          url: item.link,
+          author: item.owner?.display_name || null,
+          // Views are the honest demand number: how many other people arrived
+          // at this question with the same problem. Score is who bothered to
+          // vote, which is always a fraction of who had the problem.
+          score: Number(item.view_count || 0),
+          comments: Number(item.answer_count || 0),
+          phrase,
+          channel: `${site}.stackexchange.com`,
+          postedAt: Number(item.creation_date || 0) * 1000,
+          // An unanswered question with real traffic is the clearest gap this
+          // whole file can find.
+          unanswered: !item.is_answered,
+        });
+      }
+      // The API tells you when you are close to the quota. Stop rather than
+      // spend somebody else's goodwill.
+      if (data.quota_remaining !== undefined && data.quota_remaining < 20) return out;
+      if (data.backoff) await new Promise((r) => setTimeout(r, Number(data.backoff) * 1000));
+    }
+  }
+  return out;
+}
+
 // --- the roster ------------------------------------------------------------
 
 export const SOURCES = [
@@ -218,6 +290,13 @@ export const SOURCES = [
     note: 'Public Algolia search API. No key, no account, explicitly free.',
     enabled: () => config.ventures.sources.includes('hackernews'),
     run: fetchHackerNews,
+  },
+  {
+    id: 'stackexchange',
+    name: 'Stack Exchange',
+    note: 'softwarerecs, webapps, superuser. People asking for tools that do not exist, with view counts.',
+    enabled: () => config.ventures.sources.includes('stackexchange'),
+    run: fetchStackExchange,
   },
   {
     id: 'reddit',
@@ -254,8 +333,10 @@ export async function harvest({ phrases = SIGNAL_PHRASES, perPhrase = 6 } = {}) 
       signals.push(...found);
       report.push({ source: source.id, status: 'ok', found: found.length });
     } catch (err) {
-      const why =
-        err.status === 403 || err.status === 429
+      const why = err.blockedLocally
+        ? `${source.name} was blocked before it left this machine: ${err.body}. That is your network ` +
+          'or proxy, not the source — nothing here will fix it.'
+        : err.status === 403 || err.status === 429
           ? `${source.name} is rate limiting or blocking us (${err.status}). Backing off.`
           : `${source.name} unreachable: ${err.message}`;
       report.push({ source: source.id, status: 'failed', why });

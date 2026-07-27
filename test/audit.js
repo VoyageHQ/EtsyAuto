@@ -119,6 +119,30 @@ check(
   `${(state.body?.ventures || []).length} shipped of ${state.body?.counts?.venturesTotal}`
 );
 
+// A venture that was built and never deployed is the commonest way one dies,
+// and the dashboard could not tell the difference — so the Operator could not
+// either. Recording where it is live is what makes "is it up?" answerable.
+{
+  const ventures = state.body?.ventures || [];
+  check(
+    'the dashboard knows where a venture is live, or that it is not',
+    ventures.every((v) => 'url' in v),
+    ventures.length ? JSON.stringify(Object.keys(ventures[0])) : 'no ventures'
+  );
+  if (ventures.length) {
+    const bad = await call('POST', `/api/ventures/${ventures[0].id}/url`, { url: 'not-a-url' });
+    check('a URL that is not a URL is refused', bad.status === 400, `status ${bad.status}`);
+    const ok = await call('POST', `/api/ventures/${ventures[0].id}/url`, { url: 'https://example.pages.dev' });
+    check('and a real one is accepted', ok.status === 200 && ok.body.url === 'https://example.pages.dev', JSON.stringify(ok.body));
+  }
+  const nowhere = await call('POST', '/api/ventures/ven_nope/revenue', { amount: 10 });
+  check('revenue against a venture that does not exist is refused', nowhere.status === 400, `status ${nowhere.status}`);
+  if (ventures.length) {
+    const negative = await call('POST', `/api/ventures/${ventures[0].id}/revenue`, { amount: -5 });
+    check('   as is a negative amount', negative.status === 400, `status ${negative.status}`);
+  }
+}
+
 // The gate that stops a hundred duplicate drafts has to be visible, or the
 // only way to know it is there is to trust that it is.
 check(

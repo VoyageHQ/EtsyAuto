@@ -14,7 +14,12 @@ import { teach, forget, lessonsFor } from '../core/memory.js';
 import { loadKnowledge } from '../knowledge/index.js';
 import { getAgent } from '../agents/registry.js';
 import { decideIdeas, requestIdeas, rebuild, relist, tick, start, stop, isRunning } from '../pipeline/orchestrator.js';
-import { decideVenture, setCampaignStatus } from '../ventures/pipeline.js';
+import {
+  decideVenture,
+  setCampaignStatus,
+  recordVentureRevenue,
+  setVentureUrl,
+} from '../ventures/pipeline.js';
 import { enqueue } from '../pipeline/queue.js';
 import { all, insert, setSetting, getSetting, update, one } from '../core/db.js';
 import { uid, now } from '../core/util.js';
@@ -222,21 +227,28 @@ const routes = [
     return { status: body.status };
   }],
 
+  // Money a venture actually took. Goes through the pipeline so the Operator
+  // and the Prospector both learn from it — the route used to insert straight
+  // into the table, which meant nothing else ever heard about the first sale.
   ['POST', /^\/api\/ventures\/([\w-]+)\/revenue$/, async (req, res, [, id]) => {
+    // Read the body once. It is a stream, and the second read gets nothing.
     const body = await readBody(req);
-    const amount = Number(body.amount);
-    if (!(amount > 0)) throw httpError(400, 'Amount must be a number.');
-    insert('venture_revenue', {
-      id: uid('vrev'),
-      venture_id: id,
-      amount,
-      currency: config.currency,
-      kind: body.kind || 'one-off',
-      note: body.note || null,
-      occurred_at: now(),
+    return { ok: true, id: recordVentureRevenue({ ventureId: id, amount: body.amount, kind: body.kind, note: body.note }) };
+  }],
+
+  // Where a live venture can actually be reached. Without this the Operator
+  // cannot tell a business that is running from a folder that was built and
+  // never deployed — which is the commonest way a venture quietly dies.
+  ['POST', /^\/api\/ventures\/([\w-]+)\/url$/, async (req, res, [, id]) => {
+    const venture = setVentureUrl(id, (await readBody(req)).url);
+    enqueue({
+      agent: 'operator',
+      kind: 'operator.check',
+      subject: `checking ${venture.name}`,
+      payload: { ventureId: id },
+      priority: 2,
     });
-    log({ kind: 'revenue', level: 'good', message: `Venture revenue recorded: ${amount}` });
-    return { ok: true };
+    return { ok: true, url: venture.url };
   }],
 
   ['GET', /^\/api\/knowledge\/([\w-]+)$/, async (req, res, [, agentId]) => {

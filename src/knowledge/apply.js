@@ -168,10 +168,45 @@ export function ventureKillReasons(venture, maxDays) {
   return reasons;
 }
 
-/** How strong the evidence behind an idea actually is. */
-export function evidenceStrength(count) {
+/**
+ * How strong the evidence behind an idea actually is.
+ *
+ * Counting posts was the only measure available when every source was a forum
+ * thread. Stack Exchange changed that: a question carries how many people
+ * arrived at it with the same problem, and whether anybody ever answered.
+ *
+ * One question with 170,000 views and no accepted answer is stronger evidence
+ * than five forum posts, and it is a different kind of evidence — those are
+ * people who searched for this, found nothing, and left. Counting it as "one
+ * post, an anecdote" throws away the best thing the harvester finds.
+ *
+ * @param {number} count how many separate people described it
+ * @param {{views?: number, unanswered?: boolean}} [reach] what the sources measured
+ */
+export function evidenceStrength(count, reach = {}) {
   const rules = rulesFor('prospector').evidence || { weakAt: 1, signalAt: 3 };
+  const views = Number(reach.views) || 0;
+
+  // Enough traffic is a market on its own, whoever posted it. The threshold is
+  // deliberately high: a few thousand views is a page people found, tens of
+  // thousands is a page people keep needing.
+  if (views >= 20000) {
+    return {
+      level: 'signal',
+      note:
+        `${views.toLocaleString()} people have read this question` +
+        (reach.unanswered ? ' and nobody has answered it.' : '.') +
+        ' That is a search with no good result at the end of it.',
+    };
+  }
+
   if (count >= rules.signalAt) return { level: 'signal', note: `${count} people described this independently.` };
+  if (views >= 5000) {
+    return {
+      level: 'thin',
+      note: `${views.toLocaleString()} readers, but only ${count} describing it in their own words. Worth watching.`,
+    };
+  }
   if (count > rules.weakAt) return { level: 'thin', note: `Only ${count} posts. Worth watching, not building yet.` };
   return { level: 'anecdote', note: 'One person said this once. That is an anecdote, not a market.' };
 }

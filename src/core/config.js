@@ -90,7 +90,7 @@ export const config = {
 
   ventures: {
     // Which research sources the Prospector may use.
-    sources: str('VENTURE_SOURCES', 'hackernews,reddit')
+    sources: str('VENTURE_SOURCES', 'hackernews,stackexchange,reddit')
       .split(',')
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean),

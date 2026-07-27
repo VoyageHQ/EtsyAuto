@@ -276,6 +276,7 @@ export function buildState() {
       status: v.status,
       stage: v.stage,
       dir: v.dir,
+      url: v.url,
       note: v.note,
       createdAt: v.created_at,
       assets: ventureAssets(v.id).map((a) => ({

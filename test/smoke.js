@@ -509,6 +509,36 @@ console.log('\nThe venture arm');
   check('signals are stored', saveSignals(fixtures) === 2 || signalCount() >= 2);
   check('the same post is never harvested twice', saveSignals(fixtures) === 0);
 
+  // Reach, not just repetition.
+  //
+  // Counting posts was the only measure available when every source was a
+  // forum thread. A Stack Exchange question carries how many people arrived at
+  // the same problem and whether anybody ever answered — and one with 170,000
+  // views and no answer is a search with nothing at the end of it, which is
+  // the clearest gap this arm can find. Calling that "one post, an anecdote"
+  // threw away the best thing the harvester brings back.
+  check(
+    'a heavily-read unanswered question counts as a market, not an anecdote',
+    evidenceStrength(1, { views: 170846, unanswered: true }).level === 'signal',
+    JSON.stringify(evidenceStrength(1, { views: 170846, unanswered: true }))
+  );
+  check(
+    '   and it says how many people, rather than "strong evidence"',
+    /170,846 people/.test(evidenceStrength(1, { views: 170846, unanswered: true }).note)
+  );
+  check(
+    '   a busy question that was answered is worth watching, not building',
+    evidenceStrength(1, { views: 8000 }).level === 'thin'
+  );
+  check(
+    '   and one person on a quiet page is still an anecdote',
+    evidenceStrength(1, { views: 40 }).level === 'anecdote'
+  );
+  check(
+    '   while three people saying it independently is still a signal',
+    evidenceStrength(3).level === 'signal'
+  );
+
   const desire = extractDesire(fixtures[0].text, fixtures[0].phrase);
   check('the actual want is extracted from the post', /chase unpaid invoices/i.test(desire), desire);
 

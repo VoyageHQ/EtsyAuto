@@ -1,6 +1,6 @@
 # Hartistic Valley
 
-Two businesses run by fifteen agents on one pixel-art dashboard, where every
+Two businesses run by sixteen agents on one pixel-art dashboard, where every
 building is a real queue and every villager is a real agent.
 
 - **The Valley** — an Etsy shop: digital products invented, designed and listed.
@@ -101,6 +101,20 @@ whom touch the shop:
 5. **The Marketer** writes the positioning, launch plan, ad copy and calendar —
    and has no payment method or posting credentials, by design.
 6. **The Harbourmaster** keeps it moving, one venture at a time.
+7. **The Operator** runs what is live — the only agent that exists for *after*
+   the build. Is the site reachable, has anybody signed up, has anybody paid,
+   and what is the single next thing to do today. It asks the hard question on
+   a schedule: three weeks up with no signups is not a product problem yet, it
+   is that nobody has been told.
+
+Every venture ships something that can actually be reached and paid for: a
+static site, a Cloudflare Worker for the API, a pricing page, and a deploy
+workflow. `DEPLOY.md` is four commands and needs no card; `SELL.md` names the
+actual people whose complaints started it, with their quotes and links.
+
+The agents will not deploy for you, open your Stripe account, or post as you —
+the first two need your accounts, and the third is how domains get banned. The
+Operator drafts; you send.
 
 ```bash
 cd ventures/<name> && node server.js     # the MVP, running, no install

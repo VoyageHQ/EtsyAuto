@@ -324,6 +324,10 @@ function shapeCluster(cluster, bags) {
     phrase: m.phrase,
     quote: truncate(firstSentenceWith(m.text, m.phrase) || m.text, 240),
     want: desires?.get(m.id) || null,
+    // How many other people arrived at the same problem. Only some sources
+    // measure it; where they do it is far better evidence than the post count.
+    views: Number(m.score) || 0,
+    unanswered: Boolean(m.unanswered),
   }));
 
   const recencyDays = Math.max(
