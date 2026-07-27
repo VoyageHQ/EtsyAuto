@@ -13,7 +13,13 @@ import {
   setVentureStage,
 } from '../ventures/pipeline.js';
 import { update, one, all } from '../core/db.js';
-import { deleteDraftListing, listingState, etsyEnabled } from '../etsy/api.js';
+import {
+  deleteDraftListing,
+  listingState,
+  etsyEnabled,
+  connectionGaps,
+  whyNotConnected,
+} from '../etsy/api.js';
 import { now, BadInput } from '../core/util.js';
 import { teach } from '../core/memory.js';
 
@@ -295,6 +301,12 @@ export async function relist(productId) {
   let removed = null;
   let note = '';
 
+  // Say it here, not in twenty minutes' time in the activity feed. The button
+  // is labelled "send to etsy"; pressing it and getting a folder of files back
+  // is the whole complaint, and the reason is one line of .env.
+  const gaps = connectionGaps();
+  if (gaps.length) note = whyNotConnected();
+
   if (listing.etsy_listing_id && etsyEnabled()) {
     try {
       const state = await listingState(listing.etsy_listing_id);
@@ -339,7 +351,7 @@ export async function relist(productId) {
     message: `${product.sku} queued to go to Etsy again. ${note}`.trim(),
   });
   pushState('product');
-  return { queued: true, removed, note };
+  return { queued: true, removed, note, connected: gaps.length === 0, missing: gaps };
 }
 
 /** Ask the Scout for ideas right now, optionally on a theme. */

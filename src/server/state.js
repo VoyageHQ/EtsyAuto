@@ -20,7 +20,7 @@ import { queuedCount, recentJobs } from '../pipeline/queue.js';
 import { isRunning } from '../pipeline/orchestrator.js';
 import { listProducts, getListing, assetsFor } from '../pipeline/products.js';
 import { llm } from '../core/llm.js';
-import { etsyEnabled } from '../etsy/api.js';
+import { etsyEnabled, connectionGaps, whyNotConnected } from '../etsy/api.js';
 import { insightsSummary } from '../core/insights.js';
 import { todayUsage, usageByAgent } from '../core/spend.js';
 import { failureSummary } from '../core/retro.js';
@@ -111,7 +111,15 @@ export function buildState() {
       currency: config.currency,
       clock: clock(),
       brain: { provider: llm.provider, live: llm.enabled, model: llm.describe() },
-      etsy: { connected: etsyEnabled(), mode: config.etsy.publishMode },
+      etsy: {
+        connected: etsyEnabled(),
+        mode: config.etsy.publishMode,
+        // Not connected is three different situations wearing one label. The
+        // Office used to say "link up" for all of them, which tells you
+        // nothing when two of the three variables are already filled in.
+        missing: connectionGaps(),
+        why: whyNotConnected(),
+      },
       discord: { connected: Boolean(getSetting('discord_ready')) },
       autoLoop: config.autoLoop,
       // What the loop is doing now, which is not the same as what .env asked

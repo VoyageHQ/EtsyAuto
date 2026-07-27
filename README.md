@@ -297,7 +297,19 @@ for you:
 ```bash
 npm run etsy:auth        # gets the access token your keystring cannot get alone
 npm run etsy:check       # proves the token works and finds your shop id
+npm run etsy:push        # upload now, in the foreground, and say what happened
 ```
+
+`etsy:push` is the one to reach for when a listing did not appear. The dashboard
+button queues a job and reports in the activity feed; this does the same work
+with nothing hidden — Etsy's actual reply, and a count of how many images and
+download files really attached. Add `--yes` to upload, `--all` to include
+listings that are already up, or a SKU to do just one.
+
+Three variables have to be filled in for uploads to happen: `ETSY_KEYSTRING`,
+`ETSY_ACCESS_TOKEN` and `ETSY_SHOP_ID`. With some but not all of them the
+Shopkeeper refuses to publish and says which line is empty, rather than quietly
+packing the files instead.
 
 See [docs/PUBLISHING.md](docs/PUBLISHING.md).
 

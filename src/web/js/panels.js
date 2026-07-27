@@ -529,8 +529,14 @@ function officePanel(state, ctx) {
           <h4>Etsy</h4>
           <p>${
             state.shop.etsy.connected
-              ? `Connected. New listings go up as <b>${esc(state.shop.etsy.mode)}</b>.`
-              : 'Not connected. Approved listings get packed into <code>out/</code> for you to paste in.'
+              ? `Connected. New listings go up as <b>${esc(state.shop.etsy.mode)}</b>, with their
+                 images and download files attached.`
+              : `Not connected — approved listings get packed into <code>out/</code> for you to
+                 paste in. ${esc(state.shop.etsy.why || '')}`
+          }${
+            (state.shop.etsy.missing || []).length && (state.shop.etsy.missing || []).length < 3
+              ? `<br /><b>Missing in .env:</b> ${state.shop.etsy.missing.map((m) => `<code>${esc(m)}</code>`).join(', ')}`
+              : ''
           }</p>
         </div>
         <div class="tile">
@@ -774,8 +780,12 @@ function wireProducts(root, ctx) {
       e.target.disabled = true;
       e.target.textContent = 'sending…';
       try {
-        const { note } = await api.relist(relist);
-        ctx.toast(note || 'queued for Etsy');
+        const { note, connected } = await api.relist(relist);
+        ctx.toast(
+          connected === false
+            ? note
+            : `${note ? note + ' ' : ''}Uploading to Etsy now — images and files included.`
+        );
       } catch (err) {
         ctx.toast(err.message);
       }

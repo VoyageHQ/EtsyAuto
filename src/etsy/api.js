@@ -16,6 +16,45 @@ const BASE = 'https://api.etsy.com/v3';
 
 export const etsyEnabled = () => config.etsy.enabled;
 
+/**
+ * Which .env lines are stopping the Shopkeeper from uploading.
+ *
+ * etsyEnabled() answers yes or no, which is the wrong shape for somebody
+ * staring at a listing that packed itself into a folder instead of going up.
+ * Three variables have to be present and any one of them missing produces the
+ * identical silent fallback, so name the one that is actually empty.
+ *
+ * @returns {string[]} empty when the connection is complete
+ */
+export function connectionGaps() {
+  const gaps = [];
+  if (!config.etsy.keystring) gaps.push('ETSY_KEYSTRING');
+  if (!config.etsy.accessToken) gaps.push('ETSY_ACCESS_TOKEN');
+  if (!config.etsy.shopId) gaps.push('ETSY_SHOP_ID');
+  return gaps;
+}
+
+/**
+ * The same thing as one sentence you could put in a toast.
+ *
+ * There is a real difference between "no Etsy account is wired up, so packing
+ * the files is the whole job" and "three quarters of a connection, so packing
+ * the files is a fault". Say which.
+ *
+ * @returns {string} empty string when connected
+ */
+export function whyNotConnected() {
+  const gaps = connectionGaps();
+  if (!gaps.length) return '';
+  if (gaps.length === 3) {
+    return 'No Etsy account is connected, so listings are packed for you to paste in by hand. ' +
+      'Run npm run etsy:auth to have them uploaded instead.';
+  }
+  const plural = gaps.length > 1;
+  return `Etsy is only half connected — ${gaps.join(' and ')} ${plural ? 'are' : 'is'} empty in .env. ` +
+    `Run npm run etsy:check to fill ${plural ? 'them' : 'it'} in.`;
+}
+
 async function accessToken() {
   const cached = getSetting('etsy_access_token', config.etsy.accessToken);
   const expires = Number(getSetting('etsy_token_expires', '0'));
@@ -103,6 +142,12 @@ async function call(path, { method = 'GET', body, headers = {}, raw } = {}) {
       hint =
         ' — your app is in developer mode, which needs ETSY_SHARED_SECRET in .env as well as' +
         ' ETSY_KEYSTRING. Run npm run etsy:check.';
+    } else if (res.status === 401) {
+      // The commonest failure by a mile, and the one whose reply text says
+      // least. Tokens last an hour; the refresh above is silent when it works
+      // and only logs when it does not, so by the time anyone reads this the
+      // refresh token has usually expired too.
+      hint = ' — your Etsy sign-in has expired. Run npm run etsy:auth to sign in again.';
     }
     const err = new Error(`Etsy ${method} ${path} → ${res.status}: ${text.slice(0, 300)}${hint}`);
     err.status = res.status;
@@ -212,6 +257,14 @@ export async function createDraftListing({ listing, product, deliverables = [], 
     meta: { listingId },
   });
 
+  // A listing with no pictures cannot be published, and one with no files is
+  // not a product. Both loops used to swallow their failures into the log,
+  // which is how a draft with nothing attached could still be announced as
+  // finished. Count what actually landed and hand the total back.
+  const problems = [];
+  let imagesUploaded = 0;
+  let filesUploaded = 0;
+
   for (const path of images.slice(0, 10)) {
     try {
       const { body, contentType } = multipart([
@@ -223,7 +276,9 @@ export async function createDraftListing({ listing, product, deliverables = [], 
         body,
         headers: { 'content-type': contentType },
       });
+      imagesUploaded += 1;
     } catch (err) {
+      problems.push(`image ${basename(path)}: ${err.message}`);
       log({ kind: 'etsy', level: 'warn', message: `Image upload failed (${basename(path)}): ${err.message}` });
     }
   }
@@ -248,7 +303,9 @@ export async function createDraftListing({ listing, product, deliverables = [], 
         body,
         headers: { 'content-type': contentType },
       });
+      filesUploaded += 1;
     } catch (err) {
+      problems.push(`file ${basename(path)}: ${err.message}`);
       log({ kind: 'etsy', level: 'warn', message: `File upload failed (${basename(path)}): ${err.message}` });
     }
   }
@@ -267,6 +324,11 @@ export async function createDraftListing({ listing, product, deliverables = [], 
     listingId: String(listingId),
     url: `https://www.etsy.com/listing/${listingId}`,
     state,
+    imagesUploaded,
+    imagesOffered: Math.min(images.length, 10),
+    filesUploaded,
+    filesOffered: Math.min(deliverables.length, 5),
+    problems,
   };
 }
 
@@ -330,5 +392,7 @@ export default {
   listingState,
   fetchReceipts,
   etsyEnabled,
+  connectionGaps,
+  whyNotConnected,
   resolveTaxonomy,
 };

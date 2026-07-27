@@ -37,6 +37,7 @@ listing: Etsy's v3 API needs an OAuth access token tied to your shop.
 ```bash
 npm run etsy:auth     # gets the token
 npm run etsy:check    # proves it works, and finds your shop id
+npm run etsy:push     # upload now, in the foreground, with nothing hidden
 npm run etsy:redraft  # replace drafts that went up without images
 ```
 
@@ -65,12 +66,47 @@ ETSY_PUBLISH_MODE=active    # listings go live the moment you approve them
 
 Leave it on `draft` until you have seen a few come through and you trust it.
 
-### Images and the API
+### What actually goes up
 
-Etsy will not take SVG. Press **save pngs** in the Shopfront *before*
-approving, and the Shopkeeper attaches them to the draft. Approve first and the
-draft is created without images, and it will tell you so — you can add them in
-Etsy or rebuild and re-approve.
+A draft created this way arrives complete:
+
+* up to **10 listing images**, watermarked with your logo;
+* up to **5 download files** — the PDFs, and any spreadsheets alongside them,
+  each labelled with its real content type so Etsy does not call a CSV a PDF;
+* the title, the 13 tags, the materials and the description.
+
+Etsy will not take SVG, and the mockups are SVG so they can embed the real
+pages at any size for nothing. The Shopkeeper rasterises them itself at upload
+time, using whatever browser the machine has — Chrome, Chromium, Edge or Brave.
+You do not need to press **save pngs** first; that button just does the same
+job in your own browser, and any PNGs it has already made are reused.
+
+If no browser can be found the product is **held**, not listed without pictures:
+Etsy cannot publish an imageless listing, so a draft without one is not a
+finished job. It shows in the Shopfront with a **send to etsy** button.
+
+### When nothing appears in your Etsy drafts
+
+Uploading needs three variables in `.env`: `ETSY_KEYSTRING`,
+`ETSY_ACCESS_TOKEN` and `ETSY_SHOP_ID`. Any one of them empty used to send
+every approved listing down the pack-it-into-a-folder route with a cheerful
+message, which is indistinguishable from success if you are not looking for it.
+
+Now:
+
+* **Some but not all set** — the Shopkeeper refuses, names the empty line, and
+  holds the product. The Office tile says which variable is missing.
+* **Etsy refuses the listing** — reported as a failure with Etsy's own words,
+  and the product held. A `401` means your sign-in expired: `npm run etsy:auth`.
+* **None set** — packing is the whole job, and it says so.
+
+To see all of it at once, in the foreground:
+
+```bash
+npm run etsy:push              # what would go up, nothing changed
+npm run etsy:push -- --yes     # upload, and print Etsy's real reply
+npm run etsy:push -- HV-0004 --yes
+```
 
 ## Pricing
 

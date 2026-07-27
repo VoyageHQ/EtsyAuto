@@ -77,7 +77,10 @@ function toast(message) {
   dom.toast.textContent = message;
   dom.toast.hidden = false;
   clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => (dom.toast.hidden = true), 2600);
+  // "queued" and "why nothing went to Etsy and which line of .env to fix" are
+  // both toasts, and 2.6 seconds is not long enough to read the second one.
+  const ms = Math.min(12000, Math.max(2600, String(message).length * 70));
+  toast.timer = setTimeout(() => (dom.toast.hidden = true), ms);
 }
 
 async function refresh(force = false) {

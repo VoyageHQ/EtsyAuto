@@ -66,6 +66,14 @@ import {
   unkeptTitlePromises,
 } from '../src/knowledge/apply.js';
 
+// This run must behave the same on a machine with a live shop as on a bare
+// clone. A half-filled .env — a keystring but no shop id, which is exactly
+// what a stalled setup leaves behind — now makes the Shopkeeper refuse to
+// publish and hold the product, which is right in real life and would make
+// this suite pass or fail depending on whose laptop it ran on. So start from
+// no connection at all; the section that needs one borrows it deliberately.
+for (const key of ['keystring', 'accessToken', 'shopId', 'sharedSecret']) config.etsy[key] = '';
+
 let failures = 0;
 let checks = 0;
 
@@ -635,6 +643,62 @@ console.log('\nThe rail on deleting listings');
   globalThis.fetch = realFetch;
   Object.assign(config.etsy, savedEtsy);
   check('the borrowed credentials were handed back', config.etsy.keystring === savedEtsy.keystring);
+}
+
+console.log('\nWhen the upload does not happen');
+{
+  // The complaint that produced this section: "when i click send to etsy it is
+  // just packing them for me to paste to etsy". Both ways that happens ended
+  // with the same green "packed and ready", so a broken connection and a
+  // finished job read identically. Each one now has to be distinguishable.
+  const { connectionGaps, whyNotConnected } = await import('../src/etsy/api.js');
+  const BORROWED = ['keystring', 'accessToken', 'shopId', 'sharedSecret'];
+  const savedEtsy = Object.fromEntries(BORROWED.map((k) => [k, config.etsy[k]]));
+
+  Object.assign(config.etsy, { keystring: 'test', accessToken: '', shopId: '', sharedSecret: '' });
+  check('a half-filled .env names the lines that are empty', connectionGaps().join(',') === 'ETSY_ACCESS_TOKEN,ETSY_SHOP_ID');
+  check('   and says so in a sentence', /half connected/i.test(whyNotConnected()));
+
+  // The Shopkeeper must hold the product rather than announce a pack, because
+  // a held product is visible in the Shopfront and has a button to retry.
+  const victim = listProducts("WHERE stage = 'listed'")[0];
+  if (victim) {
+    update('products', victim.id, { status: 'active' });
+    const shopkeeper = getAgent('lister');
+    const out = await shopkeeper.handle({ payload: { productId: victim.id } });
+    const after = listProducts(`WHERE id = '${victim.id}'`)[0];
+    check('half a connection holds the product instead of packing it', out.result?.held === 'etsy not connected', JSON.stringify(out.result));
+    check('   and the product is blocked, so it shows up with a way back', after.status === 'blocked', after.status);
+    update('products', victim.id, { status: 'active' });
+  }
+
+  // A refusal from Etsy is a fault, not a finish. It used to fall through to
+  // the pack and report success.
+  Object.assign(config.etsy, { keystring: 'test', accessToken: 'x.y', shopId: '1', sharedSecret: 's' });
+  const realFetch = globalThis.fetch;
+  // Only Etsy is stubbed. The Shopkeeper renders its images through a local
+  // headless browser it finds over HTTP, and swallowing that call was enough
+  // to make this test fail for the wrong reason — it never reached Etsy at all.
+  globalThis.fetch = async (url, opts) => {
+    if (!String(url).startsWith('https://api.etsy.com')) return realFetch(url, opts);
+    if (String(url).includes('/oauth/token')) {
+      return new Response(JSON.stringify({ access_token: 'x.y', expires_in: 3600 }), { status: 200 });
+    }
+    return new Response('{"error":"Invalid API key"}', { status: 401 });
+  };
+
+  if (victim) {
+    const shopkeeper = getAgent('lister');
+    const out = await shopkeeper.handle({ payload: { productId: victim.id } });
+    const after = listProducts(`WHERE id = '${victim.id}'`)[0];
+    check('a refusal from Etsy is reported as a failure, not a pack', Boolean(out.result?.failed), JSON.stringify(out.result));
+    check('   with the sign-in hint attached to the 401', /etsy:auth/.test(String(out.result?.failed)), String(out.result?.failed).slice(0, 120));
+    check('   and the product held rather than marked finished', after.status === 'blocked', after.status);
+    update('products', victim.id, { status: 'active' });
+  }
+
+  globalThis.fetch = realFetch;
+  Object.assign(config.etsy, savedEtsy);
 }
 
 console.log('\nProtecting the listing images');

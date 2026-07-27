@@ -14,6 +14,7 @@ import { all, count, one } from './db.js';
 import config from './config.js';
 import { openApprovals } from './approvals.js';
 import { auditListing } from '../etsy/seo.js';
+import { connectionGaps } from '../etsy/api.js';
 import { rulesFor } from '../knowledge/index.js';
 import { imageProblems, findTrademarks } from '../knowledge/apply.js';
 import { money } from './util.js';
@@ -75,6 +76,20 @@ export function checkShop({ staleDays = 45 } = {}) {
         product.id
       );
     }
+  }
+
+  // --- a connection that looks set up but is not ------------------------
+  // Half a connection is worse than none, because everything downstream
+  // behaves as though packing the files were the plan. Two of three variables
+  // filled in means somebody meant to upload.
+  const gaps = connectionGaps();
+  if (gaps.length && gaps.length < 3) {
+    add(
+      'bad',
+      'etsy',
+      `Etsy is half connected — ${gaps.join(' and ')} ${gaps.length > 1 ? 'are' : 'is'} empty in .env.`,
+      'Run npm run etsy:check. Until then every approved listing is packed into out/ instead of uploaded.'
+    );
   }
 
   // --- work that is finished but blocked --------------------------------

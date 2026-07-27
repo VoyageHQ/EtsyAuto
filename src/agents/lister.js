@@ -5,7 +5,7 @@ import Agent from './base.js';
 import config from '../core/config.js';
 import { getProduct, getListing, assetsFor, setStage, blockProduct } from '../pipeline/products.js';
 import { writeListingPack } from '../etsy/export.js';
-import { createDraftListing, etsyEnabled } from '../etsy/api.js';
+import { createDraftListing, connectionGaps, whyNotConnected } from '../etsy/api.js';
 import { rasterise, findBrowser } from '../design/rasterise.js';
 import { insert, update, one } from '../core/db.js';
 import { uid, now, money } from '../core/util.js';
@@ -97,9 +97,29 @@ say so plainly.`,
     if (!listing) return { result: { skipped: 'nothing written yet' } };
     this.moveTo('shopfront', `listing ${product.sku}`);
 
+    // The pack is written either way. It is the fallback when there is no Etsy
+    // account wired up, and it is the paste-it-by-hand escape hatch when the
+    // upload fails — but writing it is never the same thing as succeeding.
     const dir = writeListingPack(product, listing);
+    const packPath = dir.replace(config.root + '/', '');
+    const gaps = connectionGaps();
 
-    if (etsyEnabled()) {
+    // Some credentials but not all. This is a broken connection, not a mode:
+    // somebody set out to upload and one empty line in .env turned it into a
+    // folder of files with a cheerful message attached. Say which line.
+    if (gaps.length && gaps.length < 3) {
+      blockProduct(product.id, `Etsy is not connected — ${gaps.join(', ')} missing`);
+      this.say(
+        `${product.sku} did NOT go to Etsy. ${whyNotConnected()} ` +
+          `I have packed it at ${packPath} so nothing is lost, but nothing is on Etsy. ` +
+          'Fix the .env line, restart, then press "send to etsy" in the Shopfront.',
+        { kind: 'listed', level: 'error', meta: { productId: product.id, missing: gaps } }
+      );
+      this.goHome();
+      return { result: { held: 'etsy not connected', missing: gaps, dir: packPath } };
+    }
+
+    if (!gaps.length) {
       try {
         const assets = assetsFor(product.id);
         const deliverables = assets
@@ -134,34 +154,61 @@ say so plainly.`,
         update('listings', listing.id, {
           status: created.state === 'active' ? 'live' : 'draft',
           etsy_listing_id: created.listingId,
-          export_path: dir.replace(config.root + '/', ''),
+          export_path: packPath,
           updated_at: now(),
         });
+
+        // The listing exists, but "exists" and "ready to publish" are not the
+        // same thing. Etsy will not let a listing with no picture go live, and
+        // a digital listing with no file attached is not a product. Report
+        // what actually landed rather than what was handed over.
+        const short = created.imagesUploaded === 0 || created.filesUploaded === 0;
         setStage(product.id, 'listed', { status: 'done' });
+        if (short) blockProduct(product.id, 'the Etsy draft is missing images or files');
         this.say(
-          `${product.sku} is a ${created.state} listing on Etsy with ${images.length} image(s) ` +
-            `and ${deliverables.length} file(s) attached: ${created.url}`,
-          { kind: 'listed', level: 'good', meta: { productId: product.id, url: created.url } }
+          `${product.sku} is a ${created.state} listing on Etsy with ` +
+            `${created.imagesUploaded}/${created.imagesOffered} image(s) and ` +
+            `${created.filesUploaded}/${created.filesOffered} file(s) attached: ${created.url}` +
+            (short
+              ? ` — but ${created.imagesUploaded === 0 ? 'no image' : 'no file'} would upload, so it ` +
+                `cannot be published yet. ${created.problems[0] || ''}`
+              : ''),
+          {
+            kind: 'listed',
+            level: short ? 'warn' : 'good',
+            meta: { productId: product.id, url: created.url },
+          }
         );
         this.goHome();
         return { result: created };
       } catch (err) {
+        // Falling through to the pack used to mean this ended with a green
+        // "packed and ready", which reads as success and is how a failed
+        // upload came to look exactly like a working one. It is a fault: hold
+        // the product so it shows in the Shopfront with a way back.
+        blockProduct(product.id, `Etsy refused the listing: ${err.message}`);
         this.say(
-          `Etsy would not take ${product.sku}: ${err.message}. The upload pack is ready instead at ${dir.replace(config.root + '/', '')}.`,
-          { kind: 'listed', level: 'warn', meta: { productId: product.id } }
+          `${product.sku} did NOT go to Etsy. Etsy said: ${err.message} ` +
+            `The files are packed at ${packPath} if you want to paste them in by hand, ` +
+            'but nothing is on Etsy yet — press "send to etsy" in the Shopfront to try again.',
+          { kind: 'listed', level: 'error', meta: { productId: product.id, dir: packPath } }
         );
+        this.goHome();
+        return { result: { failed: err.message, dir: packPath } };
       }
     }
 
+    // No Etsy account at all. Here the pack really is the finished job.
     update('listings', listing.id, {
       status: 'exported',
-      export_path: dir.replace(config.root + '/', ''),
+      export_path: packPath,
       updated_at: now(),
     });
     setStage(product.id, 'listed', { status: 'done' });
     this.say(
-      `${product.sku} packed and ready at ${dir.replace(config.root + '/', '')}/LISTING.md — ` +
-        `title, 13 tags and description ready to paste, priced ${money(listing.price, config.currency)}.`,
+      `${product.sku} packed and ready at ${packPath}/LISTING.md — ` +
+        `title, 13 tags and description ready to paste, priced ${money(listing.price, config.currency)}. ` +
+        'Run npm run etsy:auth and I will upload these for you instead.',
       { kind: 'packed', level: 'good', meta: { productId: product.id, dir } }
     );
     this.goHome();

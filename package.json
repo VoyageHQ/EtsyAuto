@@ -24,6 +24,7 @@
     "brain:check": "node --disable-warning=ExperimentalWarning scripts/brain-check.js",
     "etsy:auth": "node --disable-warning=ExperimentalWarning scripts/etsy-auth.js",
     "etsy:check": "node --disable-warning=ExperimentalWarning scripts/etsy-check.js",
+    "etsy:push": "node --disable-warning=ExperimentalWarning scripts/etsy-push.js",
     "etsy:redraft": "node --disable-warning=ExperimentalWarning scripts/etsy-redraft.js",
     "test": "node --disable-warning=ExperimentalWarning test/smoke.js",
     "audit": "node --disable-warning=ExperimentalWarning test/audit.js",
