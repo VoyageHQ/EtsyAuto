@@ -315,6 +315,9 @@ for (const [table, column, type] of [
   // or press "send to etsy", cleared the instant the Shopkeeper acts on it. A
   // retry, a second tick, a re-run of a script — none of them can put a second
   // draft in the shop, because the permission is already spent.
+  // Where a live venture can be reached. Without it the Operator cannot tell
+  // a business that is running from a folder that was never deployed.
+  ['ventures', 'url', 'TEXT'],
   ['listings', 'upload_ok_at', 'INTEGER'],
   ['listings', 'upload_ok_by', 'TEXT'],
   ['listings', 'uploaded_at', 'INTEGER'],

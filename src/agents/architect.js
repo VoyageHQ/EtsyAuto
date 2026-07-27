@@ -3,6 +3,7 @@
 import Agent from './base.js';
 import { getVenture, advanceVenture } from '../ventures/pipeline.js';
 import { truncate } from '../core/util.js';
+import { affordability, freeTierBlock, stackLine, FREE_STACK } from '../ventures/freetier.js';
 
 export class Architect extends Agent {
   constructor() {
@@ -22,7 +23,9 @@ of evenings, and no larger.
 How you scope:
 - The first version does one job completely. Not three jobs badly.
 - Anything that is not needed to take the first payment goes in "not building".
-- Prefer boring, free technology the owner can host cheaply and understand.
+- The whole thing must run on free tiers with no card on file. Not "cheap" —
+  free. A plan with an invoice attached is not a plan for somebody starting
+  from nothing, and the invoice always arrives after the work.
 - No accounts system in version one unless the product genuinely cannot work
   without it. Email plus a payment link gets you further than you think.
 - Say what "done" looks like as a number, not a feeling.`,
@@ -42,6 +45,27 @@ How you scope:
     });
 
     const clean = this.normalise(plan, venture);
+
+    // The gate that makes "costs nothing to start" true rather than intended.
+    // A plan naming AWS or a per-token API reads fine and bills silently, and
+    // the owner finds out from a statement rather than from this.
+    const cost = affordability({ ...venture, plan: clean });
+    if (!cost.ok) {
+      clean.stack = `${stackLine()} (rewritten: the first plan would have cost money)`;
+      clean.costWarnings = cost.reasons;
+      this.say(
+        `Rewrote the stack for ${venture.name}. The plan would have cost money before the first ` +
+          `customer: ${cost.reasons[0]}`,
+        { kind: 'planned', level: 'warn', meta: { ventureId: venture.id, reasons: cost.reasons } }
+      );
+    }
+
+    // Whatever the model said, the owner needs the numbers rather than a
+    // brand name. A stack line without limits is a decision nobody can check.
+    clean.runningCost = {
+      total: 'nothing until somebody pays you',
+      parts: Object.entries(FREE_STACK).map(([job, s]) => ({ job, service: s.name, free: s.free })),
+    };
 
     this.say(
       `${venture.name} scoped: ${clean.mustHave.length} must-haves, ` +
@@ -68,6 +92,8 @@ ${venture.analysis?.whySwitch ? `Why anyone switches: ${venture.analysis.whySwit
 
 It must be buildable by one person in about two weeks of evenings, and it must
 be able to take a payment at the end of it.
+
+${freeTierBlock()}
 
 Return JSON:
 {
@@ -103,9 +129,7 @@ Return JSON:
         'Integrations — wait until three people ask for the same one',
         'An admin dashboard — you are the admin, use the database',
       ],
-      stack:
-        'Plain Node with no dependencies and static HTML. It is free to host, ' +
-        'starts instantly, and nothing breaks when a package updates.',
+      stack: stackLine(),
       milestones: [
         { week: 1, deliver: 'Landing page live, waitlist collecting real emails, problem validated by replies' },
         { week: 2, deliver: 'The core action working for one real user, payment link live' },

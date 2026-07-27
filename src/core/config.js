@@ -110,6 +110,9 @@ export const config = {
     // many days. Ideas without a path to revenue are hobbies.
     maxDaysToRevenue: num('VENTURE_MAX_DAYS_TO_REVENUE', 90),
     dir: str('VENTURE_DIR', 'ventures'),
+    // How often the Operator looks at what is live. Often enough that a site
+    // being down is noticed the same day, rarely enough that it is not noise.
+    checkHours: num('VENTURE_CHECK_HOURS', 6),
   },
 
   autoLoop: bool('AUTO_LOOP', true),

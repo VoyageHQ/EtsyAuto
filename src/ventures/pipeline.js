@@ -4,7 +4,7 @@
 //          ──▶ build ──▶ marketing ──▶ live
 //
 import { all, count, insert, one, json, update } from '../core/db.js';
-import { uid, now, slug } from '../core/util.js';
+import { uid, now, slug, BadInput } from '../core/util.js';
 import { log, pushState } from '../core/events.js';
 import { enqueue } from '../pipeline/queue.js';
 import { similarity, TOO_SIMILAR } from '../core/similarity.js';
@@ -266,6 +266,48 @@ export function clearVentureAssets(ventureId, kind = null) {
       (row) => update('venture_assets', row.id, { path: null })
     );
   }
+}
+
+/**
+ * Money a venture actually took.
+ *
+ * Recorded by hand or from a Stripe receipt — never inferred. A revenue figure
+ * this shop made up would be the most damaging number on the whole dashboard.
+ */
+export function recordVentureRevenue({ ventureId, amount, currency, kind = 'one-off', note = '' }) {
+  const value = Number(amount);
+  if (!getVenture(ventureId)) throw new BadInput('No such venture.');
+  if (!Number.isFinite(value) || value <= 0) throw new BadInput('That is not an amount.');
+  const id = uid('vrev');
+  insert('venture_revenue', {
+    id,
+    venture_id: ventureId,
+    amount: value,
+    currency: currency || config.currency,
+    kind,
+    note: String(note).slice(0, 300),
+    occurred_at: now(),
+  });
+  log({
+    agent: 'operator',
+    kind: 'venture',
+    level: 'good',
+    message: `${getVenture(ventureId).name} took ${value} ${currency || config.currency}. That is the first number that matters.`,
+    meta: { ventureId },
+  });
+  pushState('venture');
+  return id;
+}
+
+/** Where a live venture can be reached, so the Operator can check it is up. */
+export function setVentureUrl(ventureId, url) {
+  const venture = getVenture(ventureId);
+  if (!venture) throw new BadInput('No such venture.');
+  const clean = String(url || '').trim();
+  if (clean && !/^https?:\/\//i.test(clean)) throw new BadInput('That needs to start with http:// or https://');
+  update('ventures', ventureId, { url: clean || null, updated_at: now() });
+  pushState('venture');
+  return getVenture(ventureId);
 }
 
 export const ventureRevenue = (ventureId) =>

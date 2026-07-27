@@ -15,6 +15,7 @@ import Analyst from './analyst.js';
 import Architect from './architect.js';
 import Builder from './builder.js';
 import Marketer from './marketer.js';
+import Operator from './operator.js';
 
 const instances = [
   // The Etsy shop.
@@ -34,6 +35,7 @@ const instances = [
   new Architect(),
   new Builder(),
   new Marketer(),
+  new Operator(),
 ];
 
 export const agents = new Map(instances.map((a) => [a.id, a]));

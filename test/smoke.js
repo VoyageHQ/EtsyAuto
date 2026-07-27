@@ -109,8 +109,8 @@ console.log('\nSmoke test — the whole pipeline, offline\n');
 
 console.log('The fleet');
 check(
-  'fifteen agents across two businesses',
-  agentList().length === 15,
+  'sixteen agents across two businesses',
+  agentList().length === 16,
   `${agentList().length} found`
 );
 check(
@@ -462,7 +462,7 @@ console.log('\nBundling what already works');
 
 console.log('\nThe venture arm');
 {
-  check('the two businesses have separate agents', agentsIn('etsy').length >= 8 && agentsIn('ventures').length === 6);
+  check('the two businesses have separate agents', agentsIn('etsy').length >= 9 && agentsIn('ventures').length === 7);
   check(
     'no venture agent stands in the Etsy valley',
     agentsIn('ventures').every((a) => WORLDS.harbour.stations.some((s) => s.id === a.home))
@@ -580,6 +580,56 @@ console.log('\nThe venture arm');
     check('   and shows a price', page.includes(String(built.monetisation.price)));
     const server = readFileSync(join(dir, 'server.js'), 'utf8');
     check('   the server has a working waitlist endpoint', server.includes('/api/waitlist'));
+  }
+
+  // --- is it a business, or a folder? -----------------------------------
+  // Before this the Builder produced a Node server on localhost writing to a
+  // JSON file: unreachable, unpayable, and gone when the laptop closed. Three
+  // properties that between them mean "not a business" however good the idea.
+  if (built.dir) {
+    const dir = join(config.root, built.dir);
+    for (const file of ['worker.js', 'wrangler.toml', 'public/pricing.html', 'DEPLOY.md', 'SELL.md']) {
+      check(`   ${file} exists`, existsSync(join(dir, file)));
+    }
+    check(
+      '   the deploy workflow is there, so pushing publishes it',
+      existsSync(join(dir, '.github/workflows/deploy.yml'))
+    );
+
+    const deployDocText = readFileSync(join(dir, 'DEPLOY.md'), 'utf8');
+    check('   and it names the free tiers rather than saying "free"', /100,000 requests a day/.test(deployDocText));
+    check('   with no card required to follow it', /no card/i.test(deployDocText));
+
+    // The one that matters most: the page can collect its first interested
+    // person before the owner has signed up for anything at all.
+    const app = readFileSync(join(dir, 'public/app.js'), 'utf8');
+    check('   the signup form falls back to mailto, so it works with no accounts', /mailto:/.test(app));
+
+    const sell = readFileSync(join(dir, 'SELL.md'), 'utf8');
+    check(
+      '   and where the first customer comes from is a list of real people, not "do marketing"',
+      built.evidence.some((e) => sell.includes(e.quote.slice(0, 30))) ||
+        /go and find five people/.test(sell)
+    );
+  }
+
+  // The Architect must not plan something that bills before the first sale.
+  {
+    const { affordability } = await import('../src/ventures/freetier.js');
+    check(
+      "the plan does not cost anything to run",
+      affordability(built).ok,
+      affordability(built).reasons.join('; ')
+    );
+    check(
+      '   and a plan that named AWS would have been caught',
+      !affordability({ ...built, solution: 'hosted on AWS EC2 with RDS' }).ok
+    );
+    check(
+      '   as would one built on per-token API calls',
+      !affordability({ ...built, solution: 'every request calls the OpenAI API' }).ok
+    );
+    check('   the running cost is written down as numbers', (built.plan?.runningCost?.parts || []).length >= 5);
   }
 
   const campaigns = campaignsFor(built.id);

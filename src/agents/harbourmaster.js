@@ -96,6 +96,26 @@ two half-built products are worth less than one finished one.`,
       decisions.push(`nudged ${venture.name}`);
     }
 
+    // 3b. Somebody has to run what is live.
+    //
+    //     Before the Operator existed, "live" meant the files had been written
+    //     and nothing ever opened the folder again. A business nobody runs is
+    //     a folder, so every live venture gets looked at: is it reachable, has
+    //     anybody signed up, has anybody paid, what is the next thing to do.
+    const lastCheck = Number(getSetting('last_operator_check', '0'));
+    const live = listVentures("WHERE stage = 'live'");
+    if (live.length && Date.now() - lastCheck > config.ventures.checkHours * 3600000) {
+      setSetting('last_operator_check', String(Date.now()));
+      // Oldest look first, so a quiet one cannot hide behind a busy one.
+      enqueue({
+        agent: 'operator',
+        kind: 'operator.check',
+        subject: 'checking what is live',
+        priority: 5,
+      });
+      decisions.push('sent the Operator round what is live');
+    }
+
     // 4. Ask the Marketer how anything live is doing, weekly.
     const lastReport = Number(getSetting('last_marketing_report', '0'));
     if (Date.now() - lastReport > DAY * 7) {

@@ -7,9 +7,18 @@
 // It is not a finished product — the thing that makes your venture different
 // still has to be built, and the plan tells you exactly what that is.
 import { mkdirSync, writeFileSync, statSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import config from '../core/config.js';
 import { recordVentureAsset, ventureDir } from './pipeline.js';
+import {
+  worker,
+  wranglerConfig,
+  pricingPage,
+  signupScript,
+  deployWorkflow,
+  deployDoc,
+  sellDoc,
+} from './deploy.js';
 import { money, slug } from '../core/util.js';
 
 const esc = (text) =>
@@ -34,6 +43,9 @@ export function scaffoldVenture(venture) {
     const abs = join(dir, relPath);
     // Never clobber work you have done by hand.
     if (existsSync(abs) && PROTECTED.some((p) => relPath.startsWith(p))) return;
+    // Some of these live in nested folders now (.github/workflows), and a
+    // missing directory is a silent half-scaffold rather than an error.
+    mkdirSync(dirname(abs), { recursive: true });
     writeFileSync(abs, contents);
     files.push(relPath);
     recordVentureAsset({
@@ -46,9 +58,22 @@ export function scaffoldVenture(venture) {
   };
 
   write('public/index.html', landingPage(venture), 'page', 'Landing page');
+  write('public/pricing.html', pricingPage(venture), 'page', 'Pricing page');
   write('public/styles.css', styles(), 'page', 'Styles');
-  write('public/app.js', clientScript(), 'code', 'Landing page script');
-  write('server.js', server(venture), 'code', 'Server');
+  // The signup script works before the owner has signed up for anything: the
+  // Worker if configured, a form service if configured, and mailto: if not.
+  write('public/app.js', signupScript(), 'code', 'Landing page script');
+
+  // The parts that make it a business rather than a demo: something the
+  // public can reach, and something that can take money.
+  write('worker.js', worker(venture), 'code', 'The API, on a free tier');
+  write('wrangler.toml', wranglerConfig(venture), 'config', 'Deploy config');
+  write('.github/workflows/deploy.yml', deployWorkflow(venture), 'config', 'Deploy on push');
+  write('DEPLOY.md', deployDoc(venture), 'doc', 'How to put it online');
+  write('SELL.md', sellDoc(venture), 'doc', 'Where the first customer comes from');
+
+  // Kept for working on it locally. It is not how it gets served.
+  write('server.js', server(venture), 'code', 'Local dev server');
   write('package.json', packageJson(venture), 'config', 'package.json');
   write('.env.example', envExample(venture), 'config', 'Environment template');
   write('.gitignore', 'node_modules/\ndata/*.json\n.env\n', 'config', 'gitignore');
