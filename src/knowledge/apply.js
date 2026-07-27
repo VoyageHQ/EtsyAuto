@@ -363,7 +363,12 @@ const SHOP_FACING_PHRASES = [
   'evergreen between',
   'search volume',
   'low competition',
-  'saturated',
+  // "saturated" is only shop talk in the market sense. In a listing about art
+  // or photography it is a colour word, and a real seed — "vibrant, saturated
+  // landscape tones" — was rejected for using it correctly. Match the market
+  // sense, not the noun.
+  'saturated market',
+  'market is saturated',
   'untapped',
   'easy money',
   'quick win',

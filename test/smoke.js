@@ -21,7 +21,7 @@ import { synthesise, extractDesire } from '../src/ventures/synthesise.js';
 import { ventureInsightBlock } from '../src/core/insights.js';
 import { drain, decideIdeas, requestIdeas } from '../src/pipeline/orchestrator.js';
 import { enqueue } from '../src/pipeline/queue.js';
-import { listProducts, getListing, assetsFor } from '../src/pipeline/products.js';
+import { listProducts, getListing, assetsFor, setStage } from '../src/pipeline/products.js';
 import { openApprovals, answer } from '../src/core/approvals.js';
 import { teach, lessonsFor, forget } from '../src/core/memory.js';
 import { insightBlock, ownerTaste } from '../src/core/insights.js';
@@ -954,6 +954,138 @@ console.log('\nWhen the upload does not happen');
     for (const row of rows) update('listings', row.id, { uploaded_at: null });
     config.etsy.maxUploadsPerHour = saved;
   }
+
+  globalThis.fetch = realFetch;
+  Object.assign(config.etsy, savedEtsy);
+}
+
+console.log("\nThe owner's product list");
+{
+  // 307 concepts imported from a spreadsheet. The danger with bulk-imported
+  // data is that it looks fine in a spreadsheet and is wrong in a listing —
+  // a tag cut at character 20 in the middle of a word, a title promising a
+  // Notion workspace that ships a PDF. Both of those shipped once and both
+  // cost the shop products that sat blocked for good.
+  const imported = SEEDS.filter((seed) => seed.build);
+  check('the master list is in the notebook', imported.length >= 300, `${imported.length} of ${SEEDS.length} seeds`);
+  check(
+    '   every tag is a real Etsy tag: 20 characters, whole words, no punctuation',
+    SEEDS.every((seed) => seed.k.every((tag) => tag.length <= 20 && /^[a-z0-9 ]+$/.test(tag))),
+    SEEDS.flatMap((s) => s.k).filter((t) => t.length > 20 || !/^[a-z0-9 ]+$/.test(t)).slice(0, 3).join(' | ')
+  );
+  check(
+    '   nothing is proposed twice',
+    new Set(SEEDS.map((s) => s.t.toLowerCase())).size === SEEDS.length
+  );
+  check(
+    '   every price is a real range above the floor',
+    SEEDS.every((s) => s.p[0] >= 1.5 && s.p[1] > s.p[0])
+  );
+
+  // The important one. A seed whose title names a tool this engine cannot
+  // produce must be marked, and the Scout must not propose it.
+  const promisesAnotherTool = SEEDS.filter((s) =>
+    /\b(notion|canva|cricut|lightroom|goodnotes|preset|svg)\b/i.test(`${s.t} ${s.g}`)
+  );
+  check(
+    '   anything naming a tool the engine cannot make is marked as artwork',
+    promisesAnotherTool.every((s) => s.build === 'art'),
+    promisesAnotherTool.filter((s) => s.build !== 'art').map((s) => s.t).slice(0, 3).join(' | ')
+  );
+
+  const scout = getAgent('scout');
+  const proposed = scout.offlineIdeas(40, null, []);
+  check(
+    '   and the Scout proposes none of them',
+    proposed.every((idea) => !/\b(notion|canva|cricut|lightroom|goodnotes|preset)\b/i.test(idea.title)),
+    proposed.filter((i) => /notion|canva|cricut/i.test(i.title)).map((i) => i.title).slice(0, 3).join(' | ')
+  );
+  check(
+    '   while still having plenty to propose',
+    proposed.length >= 20,
+    `${proposed.length} ideas from a clean bench`
+  );
+
+  // "Editable" is a promise the buyer checks the moment they open the file.
+  // A seed that makes it has to ship the spreadsheet that keeps it — this is
+  // the same fault as the "editable edition" spin-offs, which promised typing
+  // fields and shipped a flat PDF, and sat blocked at the design stage for good.
+  const overPromising = SEEDS.filter(
+    (s) =>
+      s.build !== 'art' &&
+      /\b(editable|fillable|auto-?calculat|google sheets|excel)\b/i.test(`${s.t} ${s.g}`) &&
+      !/spreadsheet/i.test(s.f)
+  );
+  check(
+    'nothing promises an editable file without shipping one',
+    overPromising.length === 0,
+    overPromising.map((s) => s.t).slice(0, 3).join(' | ')
+  );
+
+  // Medical, legal, tax and grief content reaches you with a warning attached.
+  const careful = SEEDS.filter((s) => s.careful);
+  check('subjects that need reading before approving are flagged', careful.length >= 10, `${careful.length} flagged`);
+  check(
+    '   including the health logbooks, which are the obvious trap',
+    careful.some((s) => /blood sugar|blood pressure|medication/i.test(s.t)),
+    careful.map((s) => s.t).slice(0, 4).join(' | ')
+  );
+}
+
+console.log('\nNot shouting at you');
+{
+  // A permission that is granted and never spent is a standing order to the
+  // Manager to try again, and it obeyed it every tick forever: fifteen
+  // identical lines a minute about one product, none of them actionable.
+  // Anything that ends an upload attempt now either spends the permission or
+  // hands it back, so the next move is yours.
+  const { grantUpload, awaitingUpload } = await import('../src/etsy/permission.js');
+  const { createProduct, saveListing } = await import('../src/pipeline/products.js');
+  const { drain: drainQueue } = await import('../src/pipeline/orchestrator.js');
+
+  const BORROWED = ['keystring', 'accessToken', 'shopId', 'sharedSecret'];
+  const savedEtsy = Object.fromEntries(BORROWED.map((k) => [k, config.etsy[k]]));
+  Object.assign(config.etsy, { keystring: 'k', accessToken: 'a.b', shopId: '1', sharedSecret: 's' });
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) =>
+    String(url).startsWith('https://api.etsy.com')
+      ? new Response('{}', { status: 200 })
+      : realFetch(url, opts);
+
+  const victim = createProduct({
+    title: 'Retry Loop Canary',
+    category: 'Budget planners',
+    spec: { pages: [{ kind: 'cover', title: 'x' }] },
+    price: 4.99,
+  });
+  saveListing(victim.id, {
+    title: 'Retry Loop Canary Printable',
+    description: 'd',
+    tags: ['a'],
+    materials: ['pdf'],
+    price: 4.99,
+    status: 'ready',
+  });
+  setStage(victim.id, 'ready', { status: 'active' });
+  grantUpload(getListing(victim.id).id, 'approval');
+
+  const attempts = () =>
+    count("SELECT COUNT(*) FROM jobs WHERE kind = 'lister.publish' AND IFNULL(payload,'') LIKE ?", `%${victim.id}%`);
+
+  for (let round = 0; round < 6; round++) {
+    enqueue({ agent: 'manager', kind: 'manager.plan', subject: 'canary', priority: 1 });
+    await drainQueue(30);
+  }
+
+  check(
+    'an upload that cannot happen is tried once, not once a tick forever',
+    attempts() <= 2,
+    `${attempts()} attempts over six rounds`
+  );
+  check(
+    '   because the permission was handed back rather than left lying around',
+    !awaitingUpload().some((l) => l.product_id === victim.id)
+  );
 
   globalThis.fetch = realFetch;
   Object.assign(config.etsy, savedEtsy);

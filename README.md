@@ -308,7 +308,13 @@ With the loop running the fleet never idles:
 * the **Researcher** reads Etsy's own live listings every few hours — how
   crowded each phrase is, what it sells for, which words the ranking titles
   use. That needs `ETSY_KEYSTRING` and nothing else: no shop, no sign-in;
-* the **Scout** proposes from those readings as well as its own notebook, and
+* the **Scout** works from a notebook of **381 product concepts** across 39
+  categories — including your own master list — and only proposes what the
+  engine can actually build. Anything naming a Notion workspace, a Cricut file
+  or a Lightroom preset stays marked and unproposed, because a title promising
+  one thing and a download that is another is a refund waiting to happen. Set
+  `PROPOSE_ARTWORK=true` if you will supply those files yourself;
+* it also proposes from those market readings as well as its own notebook, and
   keeps the shortlist at `IDEA_BACKLOG_TARGET` by letting the weakest ideas
   make way rather than stopping when the list is full;
 * the **Signwriter** sweeps the shop's findability, the **Curator** looks for

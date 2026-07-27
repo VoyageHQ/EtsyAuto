@@ -100,6 +100,11 @@ only if it is unusually uncontested.`,
         batch,
         similar_to: idea.similarTo ?? null,
         similarity: idea.similarity ?? null,
+        // Shown in the Review Hall before you decide. The subjects flagged
+        // here cost somebody more than a refund if the shop gets them wrong.
+        note: idea.careful
+          ? 'Read this one before approving: medical, legal, tax or grief content. Say what it is not, and never give advice.'
+          : null,
         created_at: now(),
       });
     }
@@ -242,7 +247,16 @@ Return a JSON array. Each element:
           `${s.t} ${s.c} ${s.a} ${s.k.join(' ')}`.toLowerCase().includes(theme.toLowerCase())
         )
       : SEEDS;
-    const seeds = shuffle(pool.length ? pool : SEEDS);
+    // Only propose what the files can actually deliver.
+    //
+    // The owner's master list carries plenty this engine cannot make — Notion
+    // workspaces, Cricut cut files, Lightroom presets, wall art. Proposing
+    // those means a title that promises one thing and a download that is
+    // another, which the Inspector rejects and which leaves the product stuck
+    // at the design stage for good. They stay in the notebook, marked, for
+    // when there is something that can build them.
+    const buildable = (seed) => config.proposeArtwork || seed.build !== 'art';
+    const seeds = shuffle((pool.length ? pool : SEEDS).filter(buildable));
     const out = [...out0];
 
     for (const seed of seeds) {
@@ -285,6 +299,9 @@ Return a JSON array. Each element:
       demand: seed.d,
       priceLow: seed.p[0],
       priceHigh: seed.p[1],
+      // Carried through to the idea row so the Review Hall can show it. Being
+      // wrong about a dose or a tax rule costs somebody more than a refund.
+      careful: seed.careful ? true : undefined,
     };
   }
 
@@ -353,6 +370,9 @@ Return a JSON array. Each element:
         priceLow,
         priceHigh,
         score: score({ effort, demand, priceLow, priceHigh }),
+        // Kept through the cleaning step so the warning reaches the Review
+        // Hall. A model's own suggestion can carry it too, if it says so.
+        careful: Boolean(item.careful),
         ...similarFields,
       });
     }

@@ -37,6 +37,27 @@ export function revokeUpload(listingId) {
 }
 
 /**
+ * Give the permission back after a failure that will not fix itself.
+ *
+ * This is the one that stops the shop shouting. A permission that is granted
+ * and never spent is a standing instruction to the Manager to try again, and
+ * it retried every tick forever — fifteen identical lines a minute about one
+ * product, none of which the owner could do anything about.
+ *
+ * So: anything that ends an upload attempt has to either spend the permission
+ * or hand it back. Handing it back means the next move is the owner's, which
+ * is honest — the product is held, it is on the Shopfront with a button, and
+ * nothing is quietly retrying in the background.
+ *
+ * The exception is a refusal that time alone resolves. The hourly ceiling is
+ * the only one of those, and it deliberately keeps the permission so the
+ * upload really does go by itself when the hour rolls on.
+ */
+export function standDown(listingId, why) {
+  update('listings', listingId, { upload_ok_at: null, upload_ok_by: `stood down: ${why}`.slice(0, 120) });
+}
+
+/**
  * How many listings this shop has created on Etsy in the last hour.
  *
  * Counted from uploaded_at rather than from anything the caller passes in, so

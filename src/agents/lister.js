@@ -6,7 +6,7 @@ import config from '../core/config.js';
 import { getProduct, getListing, assetsFor, setStage, blockProduct } from '../pipeline/products.js';
 import { writeListingPack } from '../etsy/export.js';
 import { createDraftListing, connectionGaps, whyNotConnected } from '../etsy/api.js';
-import { mayUpload, claimUpload, markUploaded } from '../etsy/permission.js';
+import { mayUpload, claimUpload, markUploaded, standDown } from '../etsy/permission.js';
 import { rasterise, findBrowser } from '../design/rasterise.js';
 import { insert, update, one } from '../core/db.js';
 import { uid, now, money } from '../core/util.js';
@@ -109,6 +109,8 @@ say so plainly.`,
     // somebody set out to upload and one empty line in .env turned it into a
     // folder of files with a cheerful message attached. Say which line.
     if (gaps.length && gaps.length < 3) {
+      // Hand the permission back, or the Manager keeps asking forever.
+      if (listing.upload_ok_at) standDown(listing.id, 'etsy not connected');
       blockProduct(product.id, `Etsy is not connected — ${gaps.join(', ')} missing`);
       this.say(
         `${product.sku} did NOT go to Etsy. ${whyNotConnected()} ` +
@@ -127,6 +129,13 @@ say so plainly.`,
       // the check that was missing when this shop filled with duplicate drafts.
       const permission = mayUpload(listing);
       if (!permission.allowed) {
+        // The rate limit clears on its own, so that one keeps its permission
+        // and really does go by itself. Everything else needs you, and a
+        // permission left lying around is a standing order to retry — which
+        // is how one product produced fifteen identical lines a minute.
+        if (permission.code !== 'rate-limit' && listing.upload_ok_at) {
+          standDown(listing.id, permission.code);
+        }
         this.say(`${product.sku} was not sent to Etsy. ${permission.why}`, {
           kind: 'listed',
           level: permission.code === 'rate-limit' ? 'error' : 'warn',
@@ -154,6 +163,7 @@ say so plainly.`,
           // The first version of this just returned, which left the product in
           // a state nothing retried and nothing displayed — worse than the
           // imageless draft it was written to prevent.
+          standDown(listing.id, 'no listing images');
           blockProduct(product.id, 'no listing images could be made');
           this.say(
             `${product.sku} is held: I could not make the listing images, and Etsy will not let a ` +

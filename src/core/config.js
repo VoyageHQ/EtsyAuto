@@ -123,6 +123,12 @@ export const config = {
   // the shortlist is full the weakest make way, so the pile stays the same
   // size and gets better rather than longer.
   ideaAskMinutes: num('IDEA_ASK_MINUTES', 30),
+  // The notebook holds concepts this engine cannot make — Notion workspaces,
+  // Cricut cut files, presets, wall art. They stay there, marked, rather than
+  // being proposed: a title promising a Notion file that ships a PDF is a
+  // refund waiting to happen. Turn this on if you intend to supply the
+  // artwork or the file yourself and just want the ideas.
+  proposeArtwork: bool('PROPOSE_ARTWORK', false),
   maxActiveProducts: num('MAX_ACTIVE_PRODUCTS', 3),
 
   discord: {

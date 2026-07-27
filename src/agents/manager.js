@@ -12,6 +12,7 @@ import { rulesFor } from '../knowledge/index.js';
 import { seasonHint } from './scout.js';
 
 const DAY = 86400000;
+const HOUR = 3600000;
 
 export class Manager extends Agent {
   constructor() {
@@ -31,6 +32,9 @@ chase anything that has stalled, and keep the seasonal calendar honest.
 You never approve ideas or listings yourself. That is the owner's job and you
 do not go near it.`,
     });
+
+    /** Products already reported as not going anywhere, so it is said once. */
+    this.gaveUpOn = new Set();
   }
 
   async handle() {
@@ -123,6 +127,33 @@ do not go near it.`,
         `%${listing.product_id}%`
       );
       if (busy) continue;
+
+      // Back off, whatever the reason.
+      //
+      // A permission that is granted and never spent is a standing order to
+      // retry, and this loop obeyed it every tick forever: fifteen identical
+      // lines a minute about one product, none of them actionable. The
+      // Shopkeeper now hands the permission back on any failure that will not
+      // fix itself, so this should never fire twice — but "should never" is
+      // not a reason to leave an unbounded retry in a loop that runs all night.
+      const tries = count(
+        "SELECT COUNT(*) FROM jobs WHERE agent_id = 'lister' AND kind = 'lister.publish' AND finished_at > ? AND payload LIKE ?",
+        Date.now() - HOUR,
+        `%${listing.product_id}%`
+      );
+      if (tries >= 3) {
+        if (!this.gaveUpOn.has(listing.product_id)) {
+          this.gaveUpOn.add(listing.product_id);
+          this.say(
+            `${listing.sku} has been sent to Etsy ${tries} times in the last hour and has not gone. ` +
+              'I have stopped trying rather than keep saying the same thing. Press "send to etsy" ' +
+              'in the Shopfront when you want another go.',
+            { kind: 'listed', level: 'warn', meta: { productId: listing.product_id } }
+          );
+        }
+        continue;
+      }
+
       enqueue({
         agent: 'lister',
         kind: 'lister.publish',

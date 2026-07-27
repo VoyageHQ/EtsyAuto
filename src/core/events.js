@@ -28,7 +28,44 @@ const DIM = '\x1b[2m';
  * @param {object} [e.meta]     anything extra
  * @param {boolean} [e.discord] set false to keep it out of Discord
  */
+/**
+ * The last few things said, so the same sentence is not said again.
+ *
+ * A loop that says one thing fifteen times a minute is unreadable, and worse,
+ * it buries the lines that matter. The repeat is always a bug somewhere else —
+ * but the log is where the owner meets it, so this is where it gets stopped.
+ * Collapsed rather than dropped: the count is kept and reported when the run
+ * of repeats ends, so nothing is hidden.
+ */
+const recent = new Map();
+const REPEAT_WINDOW = 60000;
+
+function repeatOf(message) {
+  const seen = recent.get(message);
+  const at = Date.now();
+  // Keep the map from growing without bound on a shop that runs all night.
+  if (recent.size > 200) {
+    for (const [key, value] of recent) if (at - value.at > REPEAT_WINDOW) recent.delete(key);
+  }
+  if (!seen || at - seen.at > REPEAT_WINDOW) {
+    recent.set(message, { at, count: 0 });
+    return 0;
+  }
+  seen.at = at;
+  seen.count += 1;
+  return seen.count;
+}
+
 export function log(e) {
+  // The second and third copies are worth seeing — you cannot tell a loop from
+  // a coincidence otherwise. After that, silence until it stops.
+  const repeats = repeatOf(String(e.message));
+  if (repeats === 3) {
+    e = { ...e, message: `${e.message}  (repeating — I will stop saying this)` };
+  } else if (repeats > 3) {
+    return null;
+  }
+
   const record = {
     id: uid('ev'),
     ts: now(),
