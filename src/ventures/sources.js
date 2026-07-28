@@ -12,6 +12,7 @@
 // still works from the built-in corpus.
 import config from '../core/config.js';
 import { log } from '../core/events.js';
+import { now } from '../core/util.js';
 
 const UA = `EtsyAuto-Ventures/0.1 (startup idea research; +https://github.com/VoyageHQ/EtsyAuto)`;
 const GAP_MS = 1200;
@@ -281,6 +282,138 @@ async function fetchStackExchange({ phrases, perPhrase = 6 }) {
   return out;
 }
 
+// --- Discourse forums -------------------------------------------------------
+// The widest source available, and the one you steer.
+//
+// Thousands of real communities run Discourse — makers, accountants, teachers,
+// photographers, self-hosters, every niche software product's own forum — and
+// every one of them exposes /search.json with no key and no account. Point
+// VENTURE_FORUMS at the communities your customers actually live in and the
+// Prospector listens where you would.
+//
+// This is the answer to "Reddit keeps blocking us". Reddit is one community
+// that happens to be big; Discourse is a thousand communities that happen to
+// share software, and none of them mind being read.
+
+async function fetchDiscourse({ phrases, perPhrase = 6, forums = [] }) {
+  const out = [];
+  for (const host of forums) {
+    const base = host.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+    for (const phrase of phrases.slice(0, 6)) {
+      const url = `https://${base}/search.json?` + new URLSearchParams({ q: `"${phrase}"` });
+      const res = await throttled(url);
+      const data = await res.json();
+      // Posts carry the words; topics carry the titles. Neither is much use
+      // without the other, so join them up rather than reporting a blurb with
+      // no idea what thread it came from.
+      const titles = new Map((data.topics || []).map((t) => [t.id, t]));
+      for (const post of (data.posts || []).slice(0, perPhrase)) {
+        const text = stripHtml(post.blurb || '');
+        if (text.length < 60) continue;
+        const topic = titles.get(post.topic_id);
+        out.push({
+          source: 'discourse',
+          externalId: `${base}:${post.id}`,
+          title: topic?.title || 'forum post',
+          text: text.slice(0, 1200),
+          url: `https://${base}/t/${post.topic_id}/${post.post_number || 1}`,
+          author: post.username || null,
+          // Replies are the closest thing a forum has to "other people have
+          // this too".
+          score: Number(topic?.reply_count || 0),
+          comments: Number(topic?.posts_count || 0),
+          phrase,
+          channel: base,
+          postedAt: Date.parse(post.created_at || topic?.created_at || '') || now(),
+        });
+      }
+    }
+  }
+  return out;
+}
+
+// --- Lobsters ---------------------------------------------------------------
+// Small, technical, and unusually free of noise. Its front page is a public
+// JSON endpoint with no key. Worth reading precisely because it is small: a
+// complaint that surfaces here has been through people who build things.
+
+async function fetchLobsters() {
+  const out = [];
+  for (const feed of ['hottest', 'newest']) {
+    const res = await throttled(`https://lobste.rs/${feed}.json`);
+    for (const story of (await res.json()) || []) {
+      const text = stripHtml(story.description || '');
+      if (text.length < 60) continue;
+      out.push({
+        source: 'lobsters',
+        externalId: String(story.short_id),
+        title: story.title || 'Lobsters',
+        text: text.slice(0, 1200),
+        url: story.comments_url || story.url,
+        author: story.submitter_user || null,
+        score: Number(story.score || 0),
+        comments: Number(story.comment_count || 0),
+        phrase: 'lobsters front page',
+        channel: (story.tags || []).join(', ') || 'lobste.rs',
+        postedAt: Date.parse(story.created_at || '') || now(),
+      });
+    }
+  }
+  return out;
+}
+
+// --- GitHub issues ----------------------------------------------------------
+// Where people ask for the thing that does not exist yet, in the project that
+// nearly does it. A feature request with fifty thumbs-up and three years of
+// silence is a gap with a queue of people already standing in it.
+//
+// Unauthenticated search allows ten requests a minute, which is plenty at this
+// pace. A GITHUB_TOKEN raises it to thirty if you have one spare.
+
+async function fetchGitHub({ phrases, perPhrase = 6 }) {
+  const out = [];
+  const token = config.ventures.githubToken;
+  for (const phrase of phrases.slice(0, 5)) {
+    const url =
+      'https://api.github.com/search/issues?' +
+      new URLSearchParams({
+        q: `"${phrase}" in:body state:open is:issue`,
+        sort: 'reactions',
+        order: 'desc',
+        per_page: String(Math.min(20, perPhrase)),
+      });
+    const res = await throttled(url, {
+      headers: {
+        accept: 'application/vnd.github+json',
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    const data = await res.json();
+    for (const issue of data.items || []) {
+      const text = stripHtml(issue.body || '');
+      if (text.length < 60) continue;
+      out.push({
+        source: 'github',
+        externalId: String(issue.id),
+        title: issue.title || 'issue',
+        text: text.slice(0, 1200),
+        url: issue.html_url,
+        author: issue.user?.login || null,
+        // Reactions are people saying "me too" without adding a comment, which
+        // is the purest demand signal a tracker produces.
+        score: Number(issue.reactions?.total_count || 0),
+        comments: Number(issue.comments || 0),
+        phrase,
+        channel: String(issue.repository_url || '').split('/repos/')[1] || 'github',
+        postedAt: Date.parse(issue.created_at || '') || now(),
+        // Open for years with reactions on it is the shape worth noticing.
+        unanswered: Number(issue.comments || 0) === 0,
+      });
+    }
+  }
+  return out;
+}
+
 // --- the roster ------------------------------------------------------------
 
 export const SOURCES = [
@@ -304,6 +437,28 @@ export const SOURCES = [
     note: 'Public .json endpoints. Register a script app for heavy use.',
     enabled: () => config.ventures.sources.includes('reddit'),
     run: (opts) => fetchReddit({ ...opts, subreddits: config.ventures.subreddits }),
+  },
+  {
+    id: 'discourse',
+    name: 'Discourse forums',
+    note: 'Any Discourse community, by name. Set VENTURE_FORUMS. No key, no account.',
+    enabled: () =>
+      config.ventures.sources.includes('discourse') && config.ventures.forums.length > 0,
+    run: (opts) => fetchDiscourse({ ...opts, forums: config.ventures.forums }),
+  },
+  {
+    id: 'github',
+    name: 'GitHub issues',
+    note: 'Feature requests nobody has built. Reactions are people saying "me too".',
+    enabled: () => config.ventures.sources.includes('github'),
+    run: fetchGitHub,
+  },
+  {
+    id: 'lobsters',
+    name: 'Lobsters',
+    note: 'Small, technical, low noise. Public JSON, no key.',
+    enabled: () => config.ventures.sources.includes('lobsters'),
+    run: fetchLobsters,
   },
   {
     id: 'rss',

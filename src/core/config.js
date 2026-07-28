@@ -103,6 +103,17 @@ export const config = {
       .map((s) => s.trim())
       .filter(Boolean),
     redditToken: str('REDDIT_TOKEN'),
+    // Discourse communities to listen to, by hostname. This is the dial that
+    // decides whether the Prospector hears your customers or strangers —
+    // thousands of real communities run Discourse and every one of them serves
+    // /search.json with no key. Point it at the forums your buyers live in.
+    forums: str('VENTURE_FORUMS', '')
+      .split(',')
+      .map((s) => s.trim().replace(/^https?:\/\//, '').replace(/\/+$/, ''))
+      .filter(Boolean),
+    // Optional. Unauthenticated GitHub search allows ten requests a minute,
+    // which is plenty; a token raises it to thirty.
+    githubToken: str('GITHUB_TOKEN'),
     // How many ventures may be in build at once. One is the honest answer for
     // a person with a day job.
     maxActive: num('VENTURE_MAX_ACTIVE', 1),

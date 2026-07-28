@@ -14,6 +14,35 @@ signals ──▶ shortlist ──you pick one──▶ analysis ──▶ plan 
 ---
 
 
+## Where it listens
+
+Six sources, none of which needs a key or an account. Set them in
+`VENTURE_SOURCES`.
+
+| Source | What it is good for | Notes |
+| --- | --- | --- |
+| **Stack Exchange** | The best one. `softwarerecs` exists for people asking "is there a tool that does X", and every question carries how many people arrived with the same problem. | No key. View counts are real demand. |
+| **Discourse forums** | The widest, and the one *you* steer. Thousands of communities run Discourse and every one serves `/search.json`. | Name them in `VENTURE_FORUMS`. |
+| **GitHub issues** | Feature requests nobody has built. Reactions are people saying "me too" without commenting. | 10 requests/min unauthenticated; `GITHUB_TOKEN` raises it to 30. |
+| **Hacker News** | Indexes every comment, always reachable. | No key. |
+| **Lobsters** | Small, technical, low noise. Worth reading *because* it is small. | No key. |
+| **Reddit** | Big, but blocks most servers with a 403. Works from a home connection. | Keep it on if you run this at home. |
+| **RSS** | Any feed you point it at. | `VENTURE_FEEDS`. |
+
+**`VENTURE_FORUMS` is the dial that matters.** It decides whether the
+Prospector hears your customers or strangers. Search "&lt;your niche&gt; discourse
+forum" — most niches have one, and a complaint on a niche forum is worth ten on
+a general one.
+
+### Two that were considered and left out
+
+- **Google Trends** — the daily trends RSS works and needs no key, but what it
+  returns is football fixtures and celebrity names. Real data, wrong data:
+  feeding it to an idea generator produces things that look like products and
+  are not.
+- **Bluesky** — the public API is open but `searchPosts` now returns 403
+  without auth, so there is nothing to build on.
+
 ## What is actually automated, and what is not
 
 This matters more than any feature list, because the gap between them is where

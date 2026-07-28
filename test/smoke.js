@@ -559,6 +559,37 @@ console.log('\nThe venture arm');
     evidenceStrength(3).level === 'signal'
   );
 
+  // The sources, and what each one needs before it will work. Reddit blocks
+  // most servers, so a shop that only knows about Reddit hears nothing.
+  {
+    const { SOURCES } = await import('../src/ventures/sources.js');
+    const ids = SOURCES.map((s) => s.id);
+    check(
+      'there is more than one way to listen',
+      ids.length >= 6,
+      ids.join(', ')
+    );
+    check(
+      '   including ones that need no key and no account',
+      ['hackernews', 'stackexchange', 'discourse', 'lobsters', 'github'].every((id) => ids.includes(id)),
+      ids.join(', ')
+    );
+    check(
+      '   and a source you point at your own communities',
+      SOURCES.find((s) => s.id === 'discourse')?.note.includes('VENTURE_FORUMS')
+    );
+    // A source with nothing configured must switch itself off rather than
+    // failing every harvest — "off" and "broken" are different states and the
+    // Lighthouse shows both.
+    const saved = config.ventures.forums;
+    config.ventures.forums = [];
+    check(
+      '   a forum source with no forums named turns itself off, not broken',
+      SOURCES.find((s) => s.id === 'discourse')?.enabled() === false
+    );
+    config.ventures.forums = saved;
+  }
+
   const desire = extractDesire(fixtures[0].text, fixtures[0].phrase);
   check('the actual want is extracted from the post', /chase unpaid invoices/i.test(desire), desire);
 
