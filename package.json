@@ -22,6 +22,7 @@
     "reset": "node --disable-warning=ExperimentalWarning src/cli.js reset",
     "discord:setup": "node --disable-warning=ExperimentalWarning scripts/discord-setup.js",
     "brain:check": "node --disable-warning=ExperimentalWarning scripts/brain-check.js",
+    "doctor": "node --disable-warning=ExperimentalWarning scripts/doctor.js",
     "etsy:auth": "node --disable-warning=ExperimentalWarning scripts/etsy-auth.js",
     "etsy:check": "node --disable-warning=ExperimentalWarning scripts/etsy-check.js",
     "etsy:push": "node --disable-warning=ExperimentalWarning scripts/etsy-push.js",

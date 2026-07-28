@@ -174,6 +174,21 @@ windows come on.
   ```bash
   npm run brain:check     # is it on, does it answer, can it return JSON
   ```
+
+## When something is not working
+
+```bash
+npm run doctor
+```
+
+One command. It walks the chain from idea to Etsy, reads the real state, calls
+Etsy for real rather than checking whether the variables are filled in, and
+ends with the next action for each thing that is actually broken — separately,
+because "no new ideas" and "nothing reaching Etsy" are two different chains and
+answering only the first is how the second stays hidden.
+
+```
+  ```
 - **Storage** — Node's built-in SQLite, in `data/valley.db`.
 
 ## Nothing goes out without you
