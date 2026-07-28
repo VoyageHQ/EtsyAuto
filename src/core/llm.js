@@ -76,6 +76,15 @@ export const llm = {
   async completeJson(opts) {
     const text = await this.complete({
       ...opts,
+      // Ask the endpoint to enforce it, not just the prompt.
+      //
+      // A big hosted model follows "return JSON" from the system prompt well
+      // enough. A local one — Hermes, Llama, Mistral on Ollama — wanders: it
+      // opens with "Here's the JSON you asked for:" and closes with a friendly
+      // paragraph, and the parse fails, and the agent silently falls back to
+      // its offline craft. Every OpenAI-compatible endpoint worth using
+      // supports response_format, and the ones that do not are handled below.
+      wantsJsonMode: true,
       system:
         (opts.system || '') +
         '\n\nReply with JSON only. No prose, no markdown fences, no commentary.',
@@ -152,23 +161,56 @@ async function callAnthropic({ system, prompt, maxTokens = 2000, temperature = 1
   return { text, usage };
 }
 
-async function callOpenAI({ system, prompt, maxTokens = 2000, temperature = 1, model }) {
+/**
+ * Does this endpoint understand response_format?
+ *
+ * Cached rather than assumed, because the answer varies by endpoint and the
+ * only honest way to find out is to ask once. Older llama.cpp servers and a
+ * few proxies reject it outright; Ollama, OpenRouter and anything OpenAI-shaped
+ * accept it.
+ */
+let jsonModeWorks = true;
+
+async function callOpenAI({ system, prompt, maxTokens = 2000, temperature = 1, model, wantsJsonMode }) {
   const base = config.llm.baseUrl.replace(/\/$/, '');
   const headers = { 'content-type': 'application/json' };
   if (config.llm.apiKey) headers.authorization = `Bearer ${config.llm.apiKey}`;
-  const data = await fetchJson(`${base}/chat/completions`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model: model || config.llm.model,
-      max_tokens: maxTokens,
-      temperature,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: prompt },
-      ],
-    }),
-  });
+
+  const send = (withJsonMode) =>
+    fetchJson(`${base}/chat/completions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: model || config.llm.model,
+        max_tokens: maxTokens,
+        temperature,
+        ...(withJsonMode ? { response_format: { type: 'json_object' } } : {}),
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: prompt },
+        ],
+      }),
+    });
+
+  let data;
+  const useJsonMode = Boolean(wantsJsonMode) && jsonModeWorks;
+  try {
+    data = await send(useJsonMode);
+  } catch (err) {
+    // One retry without it, then remember. Losing JSON mode costs some
+    // reliability; refusing to answer at all costs the whole feature.
+    if (!useJsonMode || !/response_format|json_object|unsupported|invalid/i.test(String(err.message))) {
+      throw err;
+    }
+    jsonModeWorks = false;
+    log({
+      kind: 'brain',
+      level: 'note',
+      message: 'This endpoint does not support JSON mode, so the agents will rely on the prompt for it.',
+      discord: false,
+    });
+    data = await send(false);
+  }
   const text = (data.choices?.[0]?.message?.content || '').trim();
   const usage = data.usage
     ? { input: data.usage.prompt_tokens, output: data.usage.completion_tokens }
